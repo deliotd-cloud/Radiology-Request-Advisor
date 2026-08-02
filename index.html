@@ -1,0 +1,2227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radiology Request Advisor</title>
+<style>
+  :root{
+    --bg:#f2f4f8;
+    --bg-grad:radial-gradient(1200px 500px at 50% -220px, #e4ecfb 0%, rgba(228,236,251,0) 70%);
+    --surface:#ffffff;
+    --surface-2:#f7f9fc;
+    --ink:#0f172a;
+    --ink-2:#334155;
+    --muted:#64748b;
+    --line:#e3e8ef;
+    --line-2:#eef2f7;
+    --accent:#2563eb; --accent-ink:#1d4ed8; --accent-soft:#eaf1ff;
+    --ok:#047857;     --ok-soft:#e7f6f0;
+    --warn:#b45309;   --warn-soft:#fdf3e3;
+    --danger:#c81e30; --danger-soft:#fdedef;
+    --r-sm:8px; --r:12px; --r-lg:16px;
+    --shadow:0 1px 2px rgba(15,23,42,.05), 0 4px 16px -6px rgba(15,23,42,.10);
+    --shadow-lg:0 2px 4px rgba(15,23,42,.05), 0 18px 40px -18px rgba(15,23,42,.22);
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0a0e14;
+      --bg-grad:radial-gradient(1200px 500px at 50% -220px, #14243c 0%, rgba(20,36,60,0) 70%);
+      --surface:#121a24;
+      --surface-2:#0e151e;
+      --ink:#e8eef7;
+      --ink-2:#c2cede;
+      --muted:#8496ad;
+      --line:#22303f;
+      --line-2:#1a2531;
+      --accent:#5b9bff; --accent-ink:#8ab6ff; --accent-soft:#152641;
+      --ok:#34d399;     --ok-soft:#0e2620;
+      --warn:#fbbf24;   --warn-soft:#2b2110;
+      --danger:#fb7185; --danger-soft:#2e1419;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px -6px rgba(0,0,0,.5);
+      --shadow-lg:0 2px 4px rgba(0,0,0,.4), 0 18px 40px -18px rgba(0,0,0,.7);
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);background-image:var(--bg-grad);
+       background-repeat:no-repeat;color:var(--ink);
+       font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+       -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+  /* ---------- header ---------- */
+  header{background:color-mix(in srgb, var(--surface) 86%, transparent);
+         -webkit-backdrop-filter:saturate(1.6) blur(10px);backdrop-filter:saturate(1.6) blur(10px);
+         border-bottom:1px solid var(--line);padding:12px 24px;position:sticky;top:0;z-index:30}
+  .hbar{max-width:1280px;margin:0 auto;display:flex;align-items:center;gap:13px}
+  .mark{width:34px;height:34px;border-radius:10px;flex:0 0 auto;display:grid;place-items:center;
+        background:linear-gradient(145deg,var(--accent),#7c3aed);
+        box-shadow:0 3px 10px -2px color-mix(in srgb, var(--accent) 55%, transparent)}
+  .mark svg{width:19px;height:19px;display:block}
+  .htext{flex:1 1 auto;min-width:0}
+  .htext h1{margin:0;font-size:16px;font-weight:650;letter-spacing:-.25px;line-height:1.2}
+  .htext p{margin:1px 0 0;font-size:12px;color:var(--muted);line-height:1.35;
+           overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hact{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .counter{display:flex;align-items:baseline;gap:5px;border:1px solid var(--line);border-radius:99px;
+           padding:5px 12px;background:var(--surface-2);cursor:pointer;transition:.15s}
+  .counter:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .counter b{font-size:14px;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
+  .counter span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:650}
+
+  /* ---------- layout ---------- */
+  .wrap{max-width:1280px;margin:0 auto;padding:20px 24px 56px;
+        display:grid;grid-template-columns:minmax(340px,415px) 1fr;gap:20px;align-items:start}
+  @media (max-width:980px){.wrap{grid-template-columns:1fr;padding:16px 16px 44px}}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+        padding:20px;box-shadow:var(--shadow)}
+  .card + .card{margin-top:16px}
+  #out,#usagePanel,#selfTestOut{scroll-margin-top:80px}
+  #out > .card, #selfTestOut > .card{animation:rise .28s cubic-bezier(.2,.7,.3,1) both}
+  @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+
+  /* ---------- form ---------- */
+  fieldset{border:0;padding:0;margin:0 0 18px}
+  fieldset:last-of-type{margin-bottom:14px}
+  legend{display:flex;align-items:center;gap:8px;width:100%;font-size:10.5px;font-weight:750;
+         letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:0 0 9px}
+  legend::after{content:"";flex:1 1 auto;height:1px;background:var(--line)}
+  label{display:block;font-size:12px;font-weight:620;margin:0 0 5px;color:var(--ink-2);letter-spacing:.01em}
+  input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-sm);
+        background:var(--surface-2);color:var(--ink);font:inherit;font-size:14px;transition:.15s}
+  input::placeholder,textarea::placeholder{color:var(--muted);opacity:.75}
+  textarea{min-height:124px;resize:vertical;line-height:1.5}
+  select{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:32px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.4' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat:no-repeat;background-position:right 9px center;background-size:15px}
+  input:hover,select:hover,textarea:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
+        background:var(--surface);box-shadow:0 0 0 3.5px color-mix(in srgb,var(--accent) 17%,transparent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:5px;font-weight:400;line-height:1.45}
+
+  .checks{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:2px}
+  @media (max-width:420px){.checks{grid-template-columns:1fr}}
+  .chk{display:flex;align-items:flex-start;gap:8px;font-size:12.8px;font-weight:500;color:var(--ink-2);
+       cursor:pointer;padding:5px 7px;margin-left:-7px;border-radius:7px;line-height:1.35;transition:.12s}
+  .chk:hover{background:var(--surface-2);color:var(--ink)}
+  .chk input{width:15px;height:15px;flex:0 0 auto;margin:1px 0 0;accent-color:var(--accent);cursor:pointer}
+  .chk:has(input:checked){color:var(--ink);font-weight:600}
+
+  button{font:inherit;font-weight:620;border-radius:var(--r-sm);cursor:pointer;padding:9px 15px;
+         border:1px solid var(--line);background:var(--surface);color:var(--ink);transition:.15s}
+  button:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--accent-ink)}
+  button:active{transform:translateY(1px)}
+  button.primary{background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 82%,#000));
+        border-color:transparent;color:#fff;width:100%;font-size:15px;font-weight:650;padding:13px;
+        letter-spacing:.01em;box-shadow:0 2px 10px -2px color-mix(in srgb,var(--accent) 60%,transparent)}
+  button.primary:hover{filter:brightness(1.09);color:#fff;
+        box-shadow:0 4px 16px -3px color-mix(in srgb,var(--accent) 65%,transparent)}
+  .btnrow{display:flex;gap:9px;flex-wrap:wrap}
+
+  /* ---------- eGFR readout ---------- */
+  .egfr-badge{margin-top:12px;border-radius:var(--r);padding:12px 14px;font-size:13px;
+              border:1px solid var(--line);background:var(--surface-2);display:none}
+  .egfr-badge.show{display:block}
+  .egfr-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .egfr-badge b{font-size:26px;font-weight:700;letter-spacing:-.6px;font-variant-numeric:tabular-nums;line-height:1}
+  .meter{height:5px;border-radius:99px;background:var(--line);margin-top:10px;overflow:hidden}
+  .meter i{display:block;height:100%;border-radius:99px;transition:width .45s cubic-bezier(.2,.7,.3,1)}
+  .egfr-note{margin-top:7px;color:var(--muted);font-size:11.5px;line-height:1.45}
+
+  .empty{color:var(--muted);text-align:center;padding:66px 24px;font-size:14px;line-height:1.6}
+  .empty svg{width:38px;height:38px;opacity:.35;margin-bottom:12px;display:block;margin-inline:auto}
+
+  /* ---------- recommendation ---------- */
+  .rec-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;
+            border-bottom:1px solid var(--line);padding-bottom:15px;margin-bottom:15px}
+  .rec-head .ind{font-size:11px;color:var(--accent-ink);text-transform:uppercase;letter-spacing:.085em;
+                 font-weight:750}
+  .rec-head h2{margin:7px 0 0;font-size:25px;font-weight:680;letter-spacing:-.55px;line-height:1.22}
+  .rec-head .sub{margin:8px 0 0;font-size:13.5px;color:var(--muted);line-height:1.5;max-width:62ch}
+  .conf{font-size:11px;color:var(--muted);white-space:nowrap;border:1px solid var(--line);
+        border-radius:99px;padding:4px 10px;background:var(--surface-2);font-weight:600}
+
+  .tag{display:inline-flex;align-items:center;font-size:10.5px;font-weight:700;letter-spacing:.055em;
+       text-transform:uppercase;padding:5px 11px;border-radius:99px;margin:0 6px 6px 0;
+       border:1px solid transparent}
+  .t-blue{background:var(--accent-soft);color:var(--accent-ink);border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+  .t-ok{background:var(--ok-soft);color:var(--ok);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
+  .t-warn{background:var(--warn-soft);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+  .t-red{background:var(--danger-soft);color:var(--danger);border-color:color-mix(in srgb,var(--danger) 32%,transparent)}
+  .t-grey{background:var(--surface-2);color:var(--muted);border-color:var(--line)}
+
+  section.blk{margin-top:20px}
+  section.blk > h3{margin:0 0 10px;font-size:10.5px;font-weight:750;letter-spacing:.1em;
+                   text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
+  section.blk > h3::after{content:"";flex:1 1 auto;height:1px;background:var(--line-2)}
+  ul.clean{margin:0;padding-left:19px}
+  ul.clean li{margin:0 0 7px;line-height:1.55;color:var(--ink-2)}
+  ul.clean li::marker{color:var(--accent);font-size:.9em}
+  ul.clean li:last-child{margin-bottom:0}
+
+  /* ---------- alerts ---------- */
+  .alert{border-radius:var(--r);padding:12px 14px;margin:0 0 9px;font-size:13.4px;line-height:1.55;
+         display:flex;gap:11px;border:1px solid;border-left-width:3px;color:var(--ink-2)}
+  .alert:last-child{margin-bottom:0}
+  .alert .ic{flex:0 0 auto;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;
+             font-size:11.5px;font-weight:800;color:#fff;margin-top:1px}
+  .alert b{display:block;margin-bottom:3px;color:var(--ink);font-weight:660;font-size:13.6px}
+  .a-red{background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 30%,transparent);border-left-color:var(--danger)}
+  .a-red .ic{background:var(--danger)}
+  .a-warn{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 32%,transparent);border-left-color:var(--warn)}
+  .a-warn .ic{background:var(--warn)}
+  .a-ok{background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 28%,transparent);border-left-color:var(--ok)}
+  .a-ok .ic{background:var(--ok)}
+  .a-info{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 28%,transparent);border-left-color:var(--accent)}
+  .a-info .ic{background:var(--accent)}
+
+  /* ---------- tables ---------- */
+  table.alt{width:100%;border-collapse:collapse;font-size:13.4px}
+  table.alt th{text-align:left;font-size:10.5px;letter-spacing:.075em;text-transform:uppercase;
+               color:var(--muted);padding:0 12px 8px 0;font-weight:720;border-bottom:1px solid var(--line)}
+  table.alt td{padding:10px 12px 10px 0;border-bottom:1px solid var(--line-2);vertical-align:top;
+               color:var(--ink-2);line-height:1.5}
+  table.alt tr:last-child td{border-bottom:0}
+  table.alt td:first-child{font-weight:620;color:var(--ink);width:38%}
+
+  .diffs{display:flex;flex-wrap:wrap;gap:7px}
+  .diff{border:1px solid var(--line);background:var(--surface-2);border-radius:99px;padding:6px 13px;
+        font-size:12.5px;cursor:pointer;color:var(--ink-2);font-weight:550;transition:.15s}
+  .diff:hover{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-soft)}
+
+  code{font:11.5px/1.5 var(--mono);background:var(--surface-2);border:1px solid var(--line);
+       border-radius:5px;padding:1.5px 5px;white-space:nowrap;color:var(--ink)}
+  .alert code{background:color-mix(in srgb,var(--ink) 8%,transparent);border-color:transparent}
+  pre.req{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:14px;
+          font:12.3px/1.6 var(--mono);white-space:pre-wrap;margin:0;max-height:340px;overflow:auto;
+          color:var(--ink-2)}
+
+  /* ---------- usage stats ---------- */
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:11px}
+  .stat{border:1px solid var(--line);border-radius:var(--r);padding:12px 13px;background:var(--surface-2)}
+  .stat .n{font-size:25px;font-weight:700;letter-spacing:-.6px;font-variant-numeric:tabular-nums;line-height:1.1}
+  .stat .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.075em;
+           font-weight:700;margin-top:5px}
+  .spark{display:flex;align-items:flex-end;gap:3px;height:48px;margin-top:2px}
+  .spark div{flex:1 1 0;background:var(--accent);border-radius:2px 2px 0 0;min-height:2px;opacity:.8}
+  .spark div:hover{opacity:1}
+  .sparkx{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:5px}
+  .bars{display:flex;flex-direction:column;gap:9px}
+  .bar .top{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-bottom:4px}
+  .bar .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+  .bar .v{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;font-weight:650;flex:0 0 auto}
+  .bar .track{height:5px;background:var(--line);border-radius:99px;overflow:hidden}
+  .bar .track i{display:block;height:100%;background:var(--accent);border-radius:99px}
+
+  /* ---------- footer ---------- */
+  .foot{max-width:1280px;margin:0 auto;padding:0 24px 48px;font-size:11.8px;color:var(--muted);line-height:1.65}
+  .foot p{margin:0 0 9px;max-width:100ch}
+  .foot b{color:var(--ink-2)}
+  .disclaimer{background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 32%,transparent);
+              border-left:3px solid var(--warn);border-radius:var(--r);padding:11px 14px;
+              font-size:12.4px;margin-bottom:18px;color:var(--ink-2);line-height:1.55}
+  .disclaimer b{color:var(--ink)}
+
+  @media print{
+    header,form,.foot,.btnrow,#selfTestOut{display:none!important}
+    body{background:#fff;background-image:none}
+    .wrap{display:block;padding:0;max-width:none}
+    .card{border:0;padding:0;box-shadow:none;animation:none}
+    .alert{break-inside:avoid}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hbar">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/><path d="M11 7.5v7M7.5 11h7"/><path d="M20.5 20.5L16 16"/>
+      </svg>
+    </div>
+    <div class="htext">
+      <h1>Radiology Request Advisor</h1>
+      <p>Choosing the right scan &middot; runs entirely in your browser &middot; no patient data leaves this device</p>
+    </div>
+    <div class="hact">
+      <div class="counter" id="counter" role="button" tabindex="0" title="View usage statistics">
+        <b id="counterN">0</b><span>uses</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div id="usagePanel" style="max-width:1280px;margin:0 auto;padding:20px 24px 0;display:none"></div>
+
+<div class="wrap">
+
+  <!-- ============ INPUT ============ -->
+  <form id="form" class="card" autocomplete="off">
+    <div class="disclaimer">
+      <b>Not a substitute for clinical judgement.</b> Suggestions are indicative only, based on published
+      referral-guideline principles (RCR iRefer, NICE, ACR Appropriateness Criteria, RCR/ESUR contrast guidance).
+      This tool is not clinically validated or regulated. Always follow local protocols and discuss complex or
+      urgent cases with the duty radiologist.
+    </div>
+
+    <fieldset>
+      <legend>Clinical indication</legend>
+      <label for="indication">What is the clinical question? Paste or type freely</label>
+      <textarea id="indication" placeholder="e.g. 68M sudden onset severe left flank pain radiating to groin, frank haematuria, apyrexial, on apixaban. Rule out obstructing calculus."></textarea>
+      <div class="hint">Include symptoms, duration, relevant history, and what you want answered. More detail = better matching.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Patient</legend>
+      <div class="row3">
+        <div>
+          <label for="age">Age (years)</label>
+          <input type="number" id="age" min="0" max="120" step="1" placeholder="68">
+        </div>
+        <div>
+          <label for="sex">Sex at birth</label>
+          <select id="sex">
+            <option value="">Not stated</option>
+            <option value="F">Female</option>
+            <option value="M">Male</option>
+          </select>
+        </div>
+        <div>
+          <label for="weight">Weight (kg)</label>
+          <input type="number" id="weight" min="0" max="400" step="1" placeholder="optional">
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <label for="urgency">Requested urgency</label>
+        <select id="urgency">
+          <option value="3">Immediate / emergency (same session)</option>
+          <option value="2" selected>Urgent (within 24 hours)</option>
+          <option value="1">Expedited / suspected cancer (2 weeks)</option>
+          <option value="0">Routine</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Renal function</legend>
+      <div class="row">
+        <div>
+          <label for="egfrMode">Enter as</label>
+          <select id="egfrMode">
+            <option value="egfr">eGFR (mL/min/1.73m&sup2;)</option>
+            <option value="cr">Creatinine (calculate eGFR)</option>
+            <option value="none">Not available</option>
+          </select>
+        </div>
+        <div id="valWrap">
+          <label for="renalVal" id="renalLbl">eGFR value</label>
+          <input type="number" id="renalVal" min="0" step="0.1" placeholder="e.g. 42">
+        </div>
+      </div>
+      <div class="row" id="crUnitsWrap" style="margin-top:10px;display:none">
+        <div>
+          <label for="crUnits">Creatinine units</label>
+          <select id="crUnits">
+            <option value="umol">&micro;mol/L</option>
+            <option value="mgdl">mg/dL</option>
+          </select>
+        </div>
+        <div>
+          <label for="sampleAge">Sample age</label>
+          <select id="sampleAge">
+            <option value="fresh">Within 7 days</option>
+            <option value="recent">7&ndash;90 days</option>
+            <option value="old">More than 90 days old</option>
+          </select>
+        </div>
+      </div>
+      <div class="egfr-badge" id="egfrBadge"></div>
+      <div class="checks" style="margin-top:12px">
+        <label class="chk"><input type="checkbox" id="aki"> Known / suspected AKI or rapidly changing creatinine</label>
+        <label class="chk"><input type="checkbox" id="dialysis"> On dialysis</label>
+        <label class="chk"><input type="checkbox" id="anuric"> Anuric (no residual output)</label>
+        <label class="chk"><input type="checkbox" id="metformin"> Taking metformin</label>
+        <label class="chk"><input type="checkbox" id="transplant"> Renal transplant / single kidney</label>
+        <label class="chk"><input type="checkbox" id="myeloma"> Myeloma / paraproteinaemia</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Safety &amp; other factors</legend>
+      <div class="checks">
+        <label class="chk"><input type="checkbox" id="pregnant"> Pregnant or possibly pregnant</label>
+        <label class="chk"><input type="checkbox" id="breastfeeding"> Breastfeeding</label>
+        <label class="chk"><input type="checkbox" id="contrastAllergy"> Previous contrast reaction</label>
+        <label class="chk"><input type="checkbox" id="mriUnsafe"> Pacemaker / implant / metal fragments</label>
+        <label class="chk"><input type="checkbox" id="claustro"> Claustrophobia / unable to lie flat</label>
+        <label class="chk"><input type="checkbox" id="thyrotox"> Active thyrotoxicosis</label>
+        <label class="chk"><input type="checkbox" id="anticoag"> Anticoagulated / bleeding risk</label>
+        <label class="chk"><input type="checkbox" id="unwell"> Haemodynamically unstable</label>
+      </div>
+    </fieldset>
+
+    <button type="submit" class="primary">Recommend imaging</button>
+  </form>
+
+  <!-- ============ OUTPUT ============ -->
+  <div id="out">
+    <div class="card"><div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
+        <path d="M9 13h6M9 17h4"/>
+      </svg>
+      Enter the clinical indication and press <b>Recommend imaging</b>.
+    </div></div>
+  </div>
+</div>
+
+<div id="selfTestOut" class="wrap" style="display:block;padding-top:0"></div>
+
+<div class="foot">
+  <p><b>How this works.</b> The free-text indication is first screened for negation, then matched against a weighted
+  keyword rule base of common referral scenarios. The highest-scoring scenario drives the modality recommendation;
+  renal function, pregnancy, age and safety flags then modify it (contrast route, gadolinium agent class, metformin
+  handling, radiation justification). Where no scenario scores above threshold, generic principles are shown and you
+  are prompted for more detail.</p>
+  <p><b>Negation handling.</b> A NegEx-style algorithm suppresses findings that are stated as absent
+  (&ldquo;no chest pain&rdquo;, &ldquo;denies haemoptysis&rdquo;, &ldquo;PE ruled out&rdquo;), while deliberately
+  preserving phrases that are requests to investigate (&ldquo;rule out PE&rdquo;, &ldquo;to exclude dissection&rdquo;,
+  &ldquo;?PE&rdquo;, &ldquo;cannot exclude&rdquo;). Scope runs to the end of the clause or about seven words,
+  whichever is shorter. The cue list is intentionally conservative: failing to spot a negation merely over-suggests a
+  scan, which vetting will catch, whereas a false negation could suppress one that was needed. Everything the tool
+  treated as negative is listed back to you so you can check it.</p>
+  <p><b>Limitations.</b> Keyword matching cannot understand nuance, temporality or unusual presentations, and
+  negation detection is a heuristic rather than genuine comprehension. It has no access to the patient record. It does
+  not replace vetting by a radiologist, and it does not cover every indication. Effective doses are population averages
+  and vary with scanner, protocol and body habitus. Renal thresholds follow current RCR/ESUR/ACR consensus but local
+  policy takes precedence.</p>
+  <p><b>Spelling and abbreviations.</b> Input is normalised before matching in three stages: abbreviation
+  expansion (SOB, LOC, #NOF, h/o), known UK/US spelling variants (hemoptysis &rarr; haemoptysis), and finally
+  Damerau&ndash;Levenshtein typo correction against the clinical vocabulary used by the rules. Typo correction is
+  skipped for words under 5 characters, allows one edit up to 7 characters and two beyond that, requires the first
+  letter to match for two-edit corrections, and makes no correction at all when two different terms tie &mdash; an
+  ambiguous guess is worse than none. Corrected terms score at 85% weight so a guess cannot outrank an exact match,
+  and every substitution is listed back to you.</p>
+  <p><b>Usage log.</b> Pressing <b>Recommend imaging</b> increments a counter held in this browser's local storage,
+  shown in the header. Each entry records only the timestamp, the matched scenario, the requested urgency and the
+  contrast type &mdash; never the indication text, the age or the renal values, so the log contains no patient data.
+  Nothing is transmitted; it is local to this browser profile on this device and will not aggregate across
+  users or machines. Click the counter to view statistics, export a CSV, or delete the log.</p>
+  <p><b>Maintenance.</b> <button type="button" id="selfTestBtn" class="ghost" style="padding:5px 11px;font-size:12px">Run self-test</button>
+  &nbsp;Runs the built-in regression suite against the rule base &mdash; useful after editing rules. Also available as
+  <code>runSelfTest()</code> in the browser console.</p>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. RULE BASE
+   Each rule: kw = [regex, score] pairs. Rules are scored by the
+   sum of matched keyword scores; highest total wins.
+   ============================================================ */
+
+const CT_IV = 'iodinated';   // IV iodinated contrast
+const GAD   = 'gadolinium';  // IV gadolinium
+const NONE  = 'none';
+
+const RULES = [
+
+/* ---------- NEURO ---------- */
+{
+  id:'stroke', cat:'Neuro', label:'Suspected acute stroke',
+  kw:[[/\bstrokes?\b/i,6],[/\bcva\b/i,5],[/fast[ -]?positive/i,6],[/hemipar|hemipleg/i,4],
+      [/facial droop|facial weakness/i,4],[/dysphas|aphas/i,3],[/slurred speech|dysarthri/i,3],
+      [/thrombolys|thrombectom/i,6],[/sudden.{0,20}(weakness|numbness)/i,4],[/\bLVO\b/,4]],
+  urg:3,
+  primary:{study:'Non-contrast CT head', contrast:NONE, dose:2,
+    why:'Excludes haemorrhage and establishes eligibility for thrombolysis. Must be immediate.'},
+  addOn:[{study:'CT angiogram (arch to vertex) ± CT perfusion', when:'Same sitting if within thrombectomy window or large-vessel occlusion suspected'}],
+  alts:[{s:'MRI brain with DWI',w:'Diagnostic uncertainty, posterior circulation, or late presentation with unclear onset'}],
+  pearls:['Door-to-CT target is 20 minutes — do NOT delay imaging waiting for renal results.',
+          'CTA is justified in renal impairment when thrombectomy is a possibility; benefit outweighs contrast risk.',
+          'Record exact time last seen well on the request — it determines the protocol.'],
+  ref:'NICE NG128; RCR iRefer'
+},
+{
+  id:'tia', cat:'Neuro', label:'Transient ischaemic attack',
+  kw:[[/\btia\b/i,7],[/transient ischaemic|transient ischemic/i,7],[/amaurosis fugax/i,6],
+      [/resolved.{0,25}(weakness|speech)/i,3]],
+  urg:1,
+  primary:{study:'MRI brain with diffusion-weighted imaging', contrast:NONE, dose:0,
+    why:'Preferred over CT — detects small/early infarcts and guides secondary prevention.'},
+  addOn:[{study:'Carotid imaging (Doppler US, or CTA/MRA)', when:'Anterior circulation territory and patient is a candidate for endarterectomy — within 1 week'}],
+  alts:[{s:'CT head',w:'MRI contraindicated or unavailable'}],
+  pearls:['Image within 24 hours of specialist assessment.','Do not delay antiplatelet therapy pending imaging.'],
+  ref:'NICE NG128'
+},
+{
+  id:'sah', cat:'Neuro', label:'Thunderclap headache / suspected subarachnoid haemorrhage',
+  kw:[[/thunderclap/i,9],[/\bsah\b/i,8],[/subarachnoid/i,9],[/worst headache/i,7],
+      [/sudden.{0,25}(severe )?headache/i,6],[/occipital.{0,15}sudden/i,4]],
+  urg:3,
+  primary:{study:'Non-contrast CT head', contrast:NONE, dose:2,
+    why:'Sensitivity approaches 100% within 6 hours of ictus on a modern scanner, falling thereafter.'},
+  addOn:[{study:'CT angiogram cerebral', when:'If SAH confirmed, or high suspicion with negative CT/LP'}],
+  alts:[{s:'Lumbar puncture at ≥12 h from onset',w:'CT negative and presentation beyond 6 hours — LP, not more imaging, is the next step'}],
+  pearls:['State the exact time of headache onset on the request — it changes interpretation.',
+          'A negative CT beyond 6 hours does NOT exclude SAH.'],
+  ref:'RCR iRefer; NICE CKS'
+},
+{
+  id:'headache_rf', cat:'Neuro', label:'Headache with red flags',
+  kw:[[/headache/i,3],[/papilloedema/i,7],[/\bicp\b|raised intracranial/i,6],
+      [/headache[\s\S]{0,120}\b(cancer|malignan|immunosupp|\bhiv\b|metasta)/i,6],
+      [/\b(cancer|malignan|immunosupp|\bhiv\b|metasta)[\s\S]{0,120}headache/i,6],
+      [/morning headache|worse.{0,12}lying/i,4],
+      [/headache.{0,30}(vomit|nausea)/i,3],[/personality change|cognitive decline/i,3],
+      [/headache[\s\S]{0,80}(focal|neurolog|seizure|visual)/i,4],
+      [/temporal arter|giant cell/i,5]],
+  urg:1,
+  primary:{study:'MRI brain with contrast', contrast:GAD, dose:0,
+    why:'Superior for posterior fossa, small metastases, meningeal disease and pituitary lesions.'},
+  alts:[{s:'CT head with contrast',w:'MRI contraindicated, or patient acutely unwell / needs same-day answer'},
+        {s:'CT venogram or MR venogram',w:'Suspected cerebral venous sinus thrombosis (pregnancy, puerperium, thrombophilia, papilloedema)'},
+        {s:'Temporal artery ultrasound',w:'Suspected giant cell arteritis — do not delay steroids'}],
+  pearls:['Uncomplicated migraine or tension-type headache with a normal neurological examination does not warrant imaging.'],
+  ref:'NICE CG150; iRefer'
+},
+{
+  id:'headinjury', cat:'Neuro', label:'Head injury',
+  kw:[[/head injury|head trauma/i,8],[/\bgcs\b/i,5],[/loss of consciousness|\bloc\b/i,4],
+      [/skull fracture|basal skull/i,6],[/post.?traumatic (amnesia|seizure)/i,5],[/fell.{0,20}head/i,3]],
+  urg:3,
+  primary:{study:'Non-contrast CT head', contrast:NONE, dose:2,
+    why:'First-line for traumatic intracranial injury. Apply NICE NG232 criteria before requesting.'},
+  addOn:[{study:'CT cervical spine', when:'NICE/Canadian C-spine criteria met, or GCS < 13, or intubated'}],
+  pearls:['Anticoagulated with any LOC or amnesia → CT within 8 hours (immediately if other risk factors).',
+          'Perform within 1 hour if GCS < 13, suspected open/depressed fracture, basal skull signs, seizure, focal deficit, or > 1 vomit.',
+          'Skull radiographs have no role in adult head injury.'],
+  ref:'NICE NG232'
+},
+{
+  id:'seizure', cat:'Neuro', label:'First seizure / new epilepsy',
+  kw:[[/seizure|convuls|\bfit\b|epilep/i,6],[/status epilepticus/i,7]],
+  urg:1,
+  primary:{study:'MRI brain (epilepsy protocol, includes hippocampal views)', contrast:NONE, dose:0,
+    why:'Identifies structural causes such as mesial temporal sclerosis, cortical dysplasia or low-grade tumour.'},
+  alts:[{s:'Urgent non-contrast CT head',w:'Acute presentation, failure to recover, focal deficit, trauma, or anticoagulated'}],
+  pearls:['Add contrast if a neoplastic or infective cause is suspected.'],
+  ref:'NICE CG137'
+},
+{
+  id:'ms', cat:'Neuro', label:'Suspected demyelination / multiple sclerosis',
+  kw:[[/multiple sclerosis|\bms\b(?! contin)/i,6],[/demyelin/i,8],[/optic neuritis/i,7],
+      [/transverse myelitis/i,7],[/\bcis\b.{0,20}demyelin/i,5]],
+  urg:1,
+  primary:{study:'MRI brain and whole spine, with and without contrast', contrast:GAD, dose:0,
+    why:'Contrast distinguishes active (enhancing) from chronic lesions and supports dissemination in time.'},
+  pearls:['Include the spinal cord — isolated cord lesions are easily missed on brain-only studies.'],
+  ref:'NICE CG186; MAGNIMS'
+},
+{
+  id:'pituitary', cat:'Neuro', label:'Pituitary / sellar pathology',
+  kw:[[/pituitar/i,9],[/prolactin/i,5],[/acromegal|cushing/i,5],[/bitemporal|visual field defect/i,5],
+      [/sella|sellar/i,6]],
+  urg:1,
+  primary:{study:'MRI pituitary (dedicated dynamic protocol) with contrast', contrast:GAD, dose:0,
+    why:'A standard brain MRI will miss microadenomas — you must request the dedicated protocol.'},
+  pearls:['Sudden headache with visual loss and hypopituitarism = suspected apoplexy → emergency MRI.'],
+  ref:'iRefer'
+},
+{
+  id:'cauda', cat:'Spine', label:'Suspected cauda equina syndrome',
+  kw:[[/cauda equina/i,10],[/saddle (anaesthesia|anesthesia|numbness)/i,8],
+      [/urinary retention.{0,30}back pain/i,7],[/back pain.{0,40}(bowel|bladder).{0,20}(dysfunction|incontinen)/i,7],
+      [/bilateral (sciatica|leg weakness)/i,5],[/reduced anal tone/i,7]],
+  urg:3,
+  primary:{study:'Urgent MRI whole spine (lumbosacral as minimum)', contrast:NONE, dose:0,
+    why:'Time-critical surgical emergency. Aim for scan and reporting within hours, day or night.'},
+  pearls:['Discuss with the on-call spinal team AND radiology simultaneously — do not wait for the scan to refer.',
+          'If MRI is contraindicated, CT myelography is the fallback — discuss with radiology.',
+          'Whole spine is preferred: a second compressive level is not rare.'],
+  ref:'NICE NG59; SBNS/BASS standards'
+},
+{
+  id:'spinalmets', cat:'Spine', label:'Suspected metastatic spinal cord compression / bone metastases',
+  kw:[[/cord compression|\bmscc\b/i,9],[/spinal met|bone met|bony met/i,8],
+      /* Cancer and back pain in either order — the classic MSCC red flag.
+         Deliberately generous: missing this diagnosis is catastrophic. */
+      [/(cancer|malignan|carcinoma|myeloma|metasta|tumour|tumor)[\s\S]{0,70}back pain/i,7],
+      [/back pain[\s\S]{0,70}(cancer|malignan|carcinoma|myeloma|metasta|tumour|tumor)/i,7],
+      [/(back|spine|spinal|thoracic).{0,40}pain[\s\S]{0,60}(leg weakness|weak legs|difficulty walking|unsteady|numbness|paraes|paresis)/i,5],
+      [/myeloma/i,5],[/pathological fracture/i,6]],
+  urg:3,
+  primary:{study:'MRI whole spine', contrast:NONE, dose:0,
+    why:'Whole spine is mandatory — multi-level disease is present in around a third of cases.'},
+  alts:[{s:'CT (if MRI contraindicated)',w:'Assesses bony destruction and stability but is insensitive for early cord compression'},
+        {s:'Whole-body MRI or low-dose whole-body CT',w:'Suspected myeloma — skeletal survey radiographs are obsolete'}],
+  pearls:['MRI within 24 hours of suspicion (within 1 week for painful spinal mets without neurology).',
+          'Start dexamethasone per local policy while awaiting imaging unless contraindicated.'],
+  ref:'NICE NG75 / CG75'
+},
+{
+  id:'backpain', cat:'Spine', label:'Non-specific low back pain / radiculopathy',
+  kw:[[/back pain/i,5],[/sciatica/i,6],[/radiculopath/i,6],[/lumbar|\bl4\b|\bl5\b|\bs1\b/i,3],
+      [/disc (prolapse|herniat|bulge)/i,6],[/spinal stenosis|claudication.{0,20}neurogenic/i,6]],
+  urg:0,
+  primary:{study:'MRI lumbar spine', contrast:NONE, dose:0,
+    why:'Only if the result will change management — i.e. surgery or injection is being actively considered.'},
+  pearls:['Do NOT image non-specific low back pain without red flags. Imaging does not improve outcomes and drives harm.',
+          'Radiculopathy: image only after 4–6 weeks of failed conservative management, unless red flags.',
+          'Screen for red flags: age <20 or >55 with new pain, trauma, cancer, steroids, IVDU, fever, weight loss, neurology.'],
+  ref:'NICE NG59'
+},
+{
+  id:'spinalinf', cat:'Spine', label:'Suspected discitis / spinal infection',
+  kw:[[/discitis|spondylodisc/i,9],[/epidural abscess/i,9],[/spinal infection|osteomyelitis.{0,15}spine/i,7],
+      [/back pain.{0,30}(fever|pyrexi|sepsis)/i,6],[/ivdu|intravenous drug/i,4]],
+  urg:3,
+  primary:{study:'MRI whole spine with contrast', contrast:GAD, dose:0,
+    why:'Contrast is essential to define abscess versus phlegmon and to plan drainage.'},
+  pearls:['Take blood cultures BEFORE antibiotics — tissue diagnosis guides prolonged therapy.'],
+  ref:'iRefer; BIA guidance'
+},
+
+/* ---------- CHEST / VASCULAR ---------- */
+{
+  id:'pe', cat:'Chest', label:'Suspected pulmonary embolism',
+  kw:[[/\bpe\b(?!p)/i,7],[/pulmonary embol/i,9],[/\bpte\b/i,6],[/wells score/i,5],
+      [/pleuritic.{0,20}(pain|chest)/i,5],[/d.?dimer/i,5],[/sudden.{0,20}(dyspnoea|dyspnea|breathless)/i,4],
+      [/hypox.{0,20}(unexplained|clear chest)/i,4],[/\bdvt\b.{0,30}(chest|breathless)/i,4]],
+  urg:2,
+  primary:{study:'CT pulmonary angiogram (CTPA)', contrast:CT_IV, dose:4,
+    why:'First-line: high sensitivity/specificity and identifies alternative diagnoses.'},
+  alts:[{s:'V/Q SPECT or planar perfusion scan',w:'Pregnancy, severe contrast allergy, or significant renal impairment — requires a normal chest radiograph'},
+        {s:'Lower-limb Doppler ultrasound',w:'Coexisting leg symptoms — a positive scan can permit treatment without chest imaging'}],
+  pearls:['Apply the Wells score and PERC/D-dimer first — do not image low-probability patients with a negative D-dimer.',
+          'In pregnancy: chest radiograph first; if normal, perfusion-only scan or CTPA. Both are acceptable — counsel on fetal versus maternal breast dose.',
+          'Give interim anticoagulation if the scan cannot be done within 4 hours and there is no contraindication.'],
+  ref:'NICE NG158; BTS'
+},
+{
+  id:'dissection', cat:'Chest', label:'Suspected aortic dissection / acute aortic syndrome', mandatoryContrast:true,
+  kw:[[/dissect/i,9],[/aortic syndrome/i,8],[/tearing.{0,20}(chest|back)/i,7],
+      [/interscapular.{0,15}pain/i,5],[/unequal.{0,15}(pulse|blood pressure|bp)/i,6],[/marfan/i,5],
+      [/intramural haematoma|penetrating ulcer/i,7]],
+  urg:3,
+  primary:{study:'ECG-gated CT angiogram of the whole aorta (chest, abdomen, pelvis)', contrast:CT_IV, dose:12,
+    why:'Non-contrast phase followed by arterial phase from thoracic inlet to femoral heads.'},
+  alts:[{s:'Transoesophageal echocardiography',w:'Too unstable to move to CT'}],
+  pearls:['Life-threatening — contrast must not be withheld for renal impairment. Treat the AKI risk afterwards.',
+          'Specify "aortic dissection protocol" so the non-contrast and arterial phases are acquired.',
+          'Alert the on-call radiologist by telephone; do not rely on the electronic request alone.'],
+  ref:'iRefer; ESC aortic disease guidance'
+},
+{
+  id:'aaa', cat:'Vascular', label:'Abdominal aortic aneurysm',
+  kw:[[/\baaa\b/i,9],[/abdominal aort/i,8],[/aneurysm/i,6],[/pulsatile mass/i,6],
+      [/ruptur.{0,20}aneurysm/i,9]],
+  urg:2,
+  primary:{study:'CT angiogram aorta with iliac run-off', contrast:CT_IV, dose:10,
+    why:'Required for suspected rupture and for pre-operative/EVAR planning.'},
+  alts:[{s:'Abdominal ultrasound',w:'Screening, surveillance of a known aneurysm, or bedside assessment in the unstable patient'}],
+  pearls:['Suspected rupture in an unstable patient: do not delay for imaging — speak to vascular surgery immediately.'],
+  ref:'NICE NG156'
+},
+{
+  id:'haemoptysis', cat:'Chest', label:'Haemoptysis',
+  kw:[[/haemoptysis|hemoptysis/i,9],[/coughing.{0,15}blood/i,7],[/blood.{0,15}sputum/i,6]],
+  urg:1,
+  primary:{study:'Chest radiograph (PA)', contrast:NONE, dose:0.02,
+    why:'Always the first study — but a normal radiograph does not exclude malignancy.'},
+  addOn:[{study:'CT chest with IV contrast', when:'Any of: age > 40, smoker, persistent or unexplained haemoptysis, abnormal radiograph'}],
+  pearls:['Massive haemoptysis: CT angiogram to localise the bleeding bronchial artery before embolisation.'],
+  ref:'NICE NG12; BTS'
+},
+{
+  id:'lungca', cat:'Chest', label:'Suspected lung cancer',
+  kw:[[/lung (cancer|ca\b|malignan)/i,9],[/lung nodule|pulmonary nodule/i,7],[/\bmass\b.{0,20}(lung|chest)/i,6],
+      [/weight loss.{0,30}(cough|smoker)/i,5],[/smoker.{0,25}(cough|chest)/i,4],[/mesotheliom|asbestos/i,6],
+      [/hilar (mass|lymphadenopathy)/i,6]],
+  urg:1,
+  primary:{study:'CT chest, upper abdomen and lower neck with IV contrast', contrast:CT_IV, dose:7,
+    why:'Standard staging study; includes adrenals and liver for metastatic disease.'},
+  addOn:[{study:'PET-CT', when:'After CT, when radical treatment is being considered, for nodal and distant staging'}],
+  pearls:['A chest radiograph within 2 weeks is the usual entry point on the suspected-cancer pathway.',
+          'Incidental nodules: follow the BTS/Fleischner algorithm rather than requesting ad-hoc repeat scans.'],
+  ref:'NICE NG12/NG122; BTS nodule guideline'
+},
+{
+  id:'ild', cat:'Chest', label:'Suspected interstitial lung disease',
+  kw:[[/interstitial|\bild\b/i,9],[/pulmonary fibros|\bipf\b/i,9],[/bronchiectas/i,8],
+      [/velcro crackles|fine crackles/i,6],[/hypersensitivity pneumonitis|sarcoid/i,6],
+      [/chronic (cough|breathless).{0,25}(clubbing|restrictive)/i,5]],
+  urg:0,
+  primary:{study:'High-resolution CT chest (volumetric, non-contrast, inspiratory ± expiratory + prone)', contrast:NONE, dose:4,
+    why:'HRCT is a distinct protocol — a routine CT chest will not answer the question.'},
+  pearls:['State "HRCT for interstitial lung disease" explicitly, and include occupational/drug exposure history.'],
+  ref:'BTS/ATS; iRefer'
+},
+{
+  id:'pneumonia', cat:'Chest', label:'Suspected pneumonia / chest infection',
+  kw:[[/pneumonia/i,8],[/chest infection|\blrti\b/i,7],[/consolidation/i,6],
+      [/(fever|pyrexi).{0,25}(cough|sputum)/i,5],[/productive cough/i,4],[/empyema|pleural effusion/i,6]],
+  urg:2,
+  primary:{study:'Chest radiograph (PA, erect if possible)', contrast:NONE, dose:0.02,
+    why:'Sufficient for the great majority of community-acquired pneumonia.'},
+  alts:[{s:'Thoracic ultrasound',w:'Pleural effusion — mandatory for safe guided drainage'},
+        {s:'CT chest with contrast',w:'Non-resolving consolidation, suspected empyema or abscess, or immunocompromise'}],
+  pearls:['Arrange a follow-up radiograph at 6 weeks if the patient is a smoker or over 50, to exclude an underlying tumour.'],
+  ref:'BTS CAP; NICE NG138'
+},
+{
+  id:'chestpain_cardiac', cat:'Cardiac', label:'Stable chest pain / suspected coronary disease',
+  kw:[[/(stable )?angina/i,8],[/chest pain.{0,30}(exertion|exercise)/i,7],[/coronary/i,7],
+      [/\bcad\b|ischaemic heart|ischemic heart/i,6],[/exertional chest/i,7]],
+  urg:0,
+  primary:{study:'CT coronary angiography (CTCA)', contrast:CT_IV, dose:4,
+    why:'First-line for stable chest pain of suspected cardiac origin (NICE CG95).'},
+  alts:[{s:'Stress perfusion MRI or myocardial perfusion scintigraphy',w:'Known coronary disease, or CTCA non-diagnostic/contraindicated'},
+        {s:'Invasive coronary angiography',w:'High clinical risk, or non-invasive testing inconclusive'}],
+  pearls:['Rate control (beta-blocker) and sinus rhythm improve CTCA image quality — check heart rate before booking.',
+          'ACUTE chest pain with ECG changes or raised troponin is an ACS pathway, not an imaging pathway.'],
+  ref:'NICE CG95'
+},
+{
+  id:'dvt', cat:'Vascular', label:'Suspected deep vein thrombosis',
+  kw:[[/\bdvt\b/i,9],[/deep vein/i,9],[/(calf|leg).{0,25}(swell|swollen|pain)/i,5],
+      [/unilateral leg swelling/i,7]],
+  urg:2,
+  primary:{study:'Proximal leg vein Doppler ultrasound', contrast:NONE, dose:0,
+    why:'First-line; repeat at 6–8 days if initially negative with a positive D-dimer.'},
+  alts:[{s:'CT or MR venography',w:'Suspected iliac or IVC thrombus, or ultrasound technically inadequate'}],
+  pearls:['Scan within 4 hours if possible; otherwise give interim anticoagulation and scan within 24 hours.'],
+  ref:'NICE NG158'
+},
+
+/* ---------- ABDOMEN / GI ---------- */
+{
+  id:'colic', cat:'Urology', label:'Suspected renal / ureteric colic',
+  kw:[[/renal colic|ureteric colic|urete?ral colic/i,10],[/(flank|loin).{0,25}(pain|to groin)/i,7],
+      [/loin to groin/i,8],[/obstruct\w*\s+(calculus|calculi|stone)/i,9],
+      [/kidney stone|renal (stone|calculus)|urolithiasis|nephrolithiasis/i,9],[/\bkub\b/i,5],
+      [/\b(calculus|calculi|stones?)\b/i,6],[/\bcolic\b/i,5],[/hydronephros/i,6],
+      [/(ureter|urete?ric)\b/i,4]],
+  urg:2,
+  primary:{study:'Non-contrast CT KUB (low-dose)', contrast:NONE, dose:3,
+    why:'Gold standard: near-100% sensitivity for calculi and identifies alternative diagnoses. No contrast needed.'},
+  alts:[{s:'Ultrasound KUB',w:'Pregnancy, children and young adults, or as first-line where CT access is limited'},
+        {s:'CT urogram with contrast',w:'Only if a urothelial tumour or other cause of obstruction is suspected'}],
+  pearls:['Contrast is NOT required — this is a good option when renal function is poor.',
+          'Image within 24 hours of presentation.',
+          'Fever plus obstruction is a urological emergency (infected obstructed kidney) — escalate immediately, do not just await imaging.'],
+  ref:'NICE NG118'
+},
+{
+  id:'haematuria', cat:'Urology', label:'Haematuria',
+  kw:[[/haematuria|hematuria/i,9],[/blood in (the )?urine/i,8],[/\bnmh\b|non.?visible haematuria/i,7]],
+  urg:1,
+  primary:{study:'CT urogram (non-contrast, nephrographic and excretory phases)', contrast:CT_IV, dose:15,
+    why:'Standard of care for visible haematuria in adults, alongside flexible cystoscopy.'},
+  alts:[{s:'Ultrasound kidneys, ureters and bladder',w:'Non-visible haematuria, patients under 40, pregnancy, or significant renal impairment'}],
+  pearls:['CT urogram carries a relatively high radiation dose — justify carefully in younger patients.',
+          'Imaging never excludes bladder cancer: cystoscopy is still required.'],
+  ref:'NICE NG12; BAUS'
+},
+{
+  id:'ruq', cat:'Abdomen', label:'Right upper quadrant pain / suspected gallstones',
+  kw:[[/right upper quadrant|\bruq\b/i,8],[/gallstone|cholelithiasis|cholecystitis/i,9],
+      [/biliary colic/i,9],[/murphy/i,6],[/gall ?bladder/i,8]],
+  urg:2,
+  primary:{study:'Abdominal ultrasound (fasted 6 hours)', contrast:NONE, dose:0,
+    why:'First-line for gallstones, wall thickening and duct dilatation. No radiation, no contrast.'},
+  alts:[{s:'MRCP',w:'Dilated common bile duct, deranged LFTs, or suspected choledocholithiasis with a negative ultrasound'},
+        {s:'CT abdomen with contrast',w:'Suspected complication — perforation, emphysematous cholecystitis, abscess — or diagnostic uncertainty'}],
+  pearls:['Ask the patient to fast for 6 hours; a contracted gallbladder makes the study non-diagnostic.'],
+  ref:'NICE CG188'
+},
+{
+  id:'jaundice', cat:'Abdomen', label:'Jaundice / obstructive liver function tests',
+  kw:[[/jaundice|icteric/i,9],[/obstructive.{0,15}(lft|picture|jaundice)/i,8],
+      [/(raised|elevated).{0,15}bilirubin/i,6],[/cholangitis/i,8],[/painless jaundice/i,9]],
+  urg:2,
+  primary:{study:'Abdominal ultrasound', contrast:NONE, dose:0,
+    why:'Establishes whether the biliary tree is dilated — this determines everything downstream.'},
+  addOn:[{study:'MRCP', when:'Dilated ducts without an obvious cause on ultrasound'},
+         {study:'CT pancreas protocol (dual-phase, with contrast)', when:'Painless jaundice with weight loss — suspected pancreatic head malignancy'}],
+  pearls:['Painless obstructive jaundice in an older patient is pancreatic cancer until proven otherwise — expedite.',
+          'Cholangitis with sepsis needs urgent drainage — involve HPB/ERCP early.'],
+  ref:'NICE NG12/NG104'
+},
+{
+  id:'appendicitis', cat:'Abdomen', label:'Suspected appendicitis',
+  kw:[[/appendicitis|appendix/i,10],[/right (iliac fossa|lower quadrant)|\brif\b|\brlq\b/i,7],
+      [/mcburney/i,7],[/rebound tenderness.{0,25}right/i,4]],
+  urg:2,
+  primary:{study:'CT abdomen and pelvis with IV contrast (portal venous phase)', contrast:CT_IV, dose:9,
+    why:'Highest accuracy in adults; also identifies the many mimics.'},
+  alts:[{s:'Ultrasound abdomen/pelvis',w:'Children, young or slim adults, and first-line in women of reproductive age'},
+        {s:'MRI abdomen (non-contrast)',w:'Pregnancy — after an inconclusive ultrasound'}],
+  pearls:['In women of reproductive age, exclude gynaecological causes and pregnancy first.',
+          'In children and young adults, use ultrasound first to avoid the radiation dose.'],
+  ref:'iRefer; ACR AC'
+},
+{
+  id:'acuteabdo', cat:'Abdomen', label:'Acute abdomen / suspected perforation or obstruction',
+  kw:[[/acute abdomen/i,9],[/perforat/i,8],[/(bowel|intestinal) obstruction/i,9],
+      [/peritonitis|peritonism|rigid abdomen/i,8],[/free (air|gas)|pneumoperitoneum/i,8],
+      [/(abdominal (pain|distension)).{0,30}(vomit|not opened bowels|absolute constipation)/i,6],
+      [/faeculent|feculent/i,7]],
+  urg:3,
+  primary:{study:'CT abdomen and pelvis with IV contrast (portal venous phase)', contrast:CT_IV, dose:9,
+    why:'Single most informative study in the undifferentiated acute abdomen.'},
+  alts:[{s:'Erect chest radiograph',w:'Quick bedside look for free subdiaphragmatic gas — but a negative film does not exclude perforation'},
+        {s:'Abdominal radiograph',w:'Very limited value; only for suspected obstruction or foreign body where CT is delayed'}],
+  pearls:['Oral contrast is usually unnecessary and delays the scan.',
+          'Suspected mesenteric ischaemia needs an ARTERIAL phase too — state this explicitly.'],
+  ref:'RCR; iRefer'
+},
+{
+  id:'mesenteric', cat:'Abdomen', label:'Suspected mesenteric ischaemia', mandatoryContrast:true,
+  kw:[[/mesenteric ischaem|mesenteric ischem/i,10],[/pain out of proportion/i,8],
+      [/(lactate|acidosis).{0,30}abdominal pain/i,6],[/\baf\b.{0,30}abdominal pain/i,5],
+      [/ischaemic (bowel|colitis)|ischemic (bowel|colitis)/i,8]],
+  urg:3,
+  primary:{study:'CT angiogram abdomen (non-contrast + arterial + portal venous phases)', contrast:CT_IV, dose:14,
+    why:'Triple-phase is essential — a single portal venous phase will miss an arterial occlusion.'},
+  pearls:['Mortality rises steeply with delay. Phone the radiologist and specify "mesenteric ischaemia protocol".',
+          'Do not withhold contrast for renal impairment in this indication.'],
+  ref:'iRefer; WSES'
+},
+{
+  id:'diverticulitis', cat:'Abdomen', label:'Suspected diverticulitis',
+  kw:[[/diverticul/i,10],[/left (iliac fossa|lower quadrant)|\blif\b|\bllq\b/i,6]],
+  urg:2,
+  primary:{study:'CT abdomen and pelvis with IV contrast', contrast:CT_IV, dose:9,
+    why:'Confirms the diagnosis and grades complications (abscess, perforation) which determine management.'},
+  pearls:['Arrange interval colonic evaluation (colonoscopy or CT colonography) after complicated diverticulitis.'],
+  ref:'NICE NG147'
+},
+{
+  id:'pancreatitis', cat:'Abdomen', label:'Acute pancreatitis',
+  kw:[[/pancreatitis/i,10],[/(raised|elevated).{0,15}(amylase|lipase)/i,8],
+      [/epigastric pain.{0,25}(back|radiat)/i,5]],
+  urg:2,
+  primary:{study:'Abdominal ultrasound (within 24 hours)', contrast:NONE, dose:0,
+    why:'To identify gallstones as the cause — this changes management (cholecystectomy / ERCP).'},
+  addOn:[{study:'CT abdomen with contrast at 72 hours or later', when:'Assessing necrosis or complications — earlier CT underestimates necrosis'}],
+  pearls:['Do not request an early CT for diagnosis in a patient with a clear clinical and biochemical picture.',
+          'MRCP if the cause remains unclear after ultrasound.'],
+  ref:'NICE NG104; IAP/APA'
+},
+{
+  id:'ibd', cat:'Abdomen', label:'Inflammatory bowel disease / small bowel assessment',
+  kw:[[/crohn/i,9],[/inflammatory bowel|\bibd\b/i,8],[/ulcerative colitis|\buc\b/i,6],
+      [/small bowel.{0,20}(assess|disease|imaging)/i,6],[/chronic diarrhoea.{0,25}(weight loss|blood)/i,4],
+      [/faecal calprotectin|fecal calprotectin/i,6]],
+  urg:1,
+  primary:{study:'MR enterography', contrast:GAD, dose:0,
+    why:'Assesses small bowel disease extent, activity and complications without ionising radiation — important in a young, repeatedly imaged population.'},
+  alts:[{s:'CT abdomen/pelvis with contrast',w:'Acute severe presentation or suspected perforation/abscess'},
+        {s:'Small bowel ultrasound',w:'Available expertise; useful for monitoring, avoids radiation entirely'}],
+  pearls:['Requires oral contrast preparation and a 45–60 minute appointment — not suitable for the acutely unwell.',
+          'Acute severe colitis: plain abdominal radiograph to assess colonic dilatation and mural changes.'],
+  ref:'NICE NG129/NG130; ECCO-ESGAR'
+},
+{
+  id:'liverlesion', cat:'Abdomen', label:'Liver lesion characterisation / cirrhosis surveillance',
+  kw:[[/liver lesion|hepatic lesion|liver mass/i,9],[/\bhcc\b|hepatocellular/i,8],
+      [/cirrhosis|chronic liver disease/i,6],[/haemangioma|adenoma|\bfnh\b/i,7],
+      [/(incidental).{0,20}liver/i,6]],
+  urg:1,
+  primary:{study:'MRI liver with hepatocyte-specific contrast', contrast:GAD, dose:0,
+    why:'Best characterisation of focal liver lesions and detection of small HCC.'},
+  alts:[{s:'Contrast-enhanced ultrasound (CEUS)',w:'Single lesion characterisation; no nephrotoxicity, safe in renal failure'},
+        {s:'Triple-phase CT liver',w:'MRI contraindicated or unavailable'},
+        {s:'Ultrasound ± AFP every 6 months',w:'Routine surveillance in established cirrhosis'}],
+  pearls:['CEUS microbubble agents are not nephrotoxic — an excellent choice in severe renal impairment.'],
+  ref:'EASL; BSG'
+},
+{
+  id:'crc', cat:'Abdomen', label:'Suspected or staging colorectal cancer',
+  kw:[[/colorectal|bowel cancer|colon cancer|rectal cancer/i,9],
+      [/change in bowel habit.{0,30}(weight loss|bleed)/i,6],[/rectal bleeding.{0,25}(weight loss|anaemia)/i,5],
+      [/iron deficiency an(a)?emia/i,6],[/staging.{0,20}(colon|rectal)/i,7]],
+  urg:1,
+  primary:{study:'CT chest, abdomen and pelvis with IV contrast', contrast:CT_IV, dose:14,
+    why:'Standard distant staging for confirmed or strongly suspected colorectal cancer.'},
+  addOn:[{study:'MRI rectum (high-resolution)', when:'Rectal tumours — for local T/N staging and circumferential resection margin'},
+         {study:'CT colonography', when:'Diagnosis in patients unfit for or declining colonoscopy'}],
+  pearls:['Diagnosis is endoscopic — CT is for staging, not for finding the primary.'],
+  ref:'NICE NG151/DG56'
+},
+{
+  id:'pelvicmass', cat:'Gynae', label:'Pelvic mass / suspected gynaecological malignancy',
+  kw:[[/pelvic mass|adnexal|ovarian (cyst|mass|cancer)/i,9],[/\bca ?125\b/i,7],
+      [/(post ?menopausal|postmenopausal) bleeding/i,8],[/endometri/i,7],[/fibroid|leiomyom/i,7],
+      [/cervical cancer/i,7]],
+  urg:1,
+  primary:{study:'Transvaginal and transabdominal pelvic ultrasound', contrast:NONE, dose:0,
+    why:'First-line for any adnexal or uterine abnormality; feeds the RMI/IOTA risk calculation.'},
+  addOn:[{study:'MRI pelvis with contrast', when:'Indeterminate adnexal mass, or local staging of endometrial/cervical cancer'},
+         {study:'CT chest/abdomen/pelvis', when:'Suspected ovarian malignancy — for distant staging'}],
+  pearls:['Postmenopausal bleeding: TVUS endometrial thickness within 2 weeks; > 4 mm warrants biopsy.'],
+  ref:'NICE NG12/CG122'
+},
+{
+  id:'testis', cat:'Urology', label:'Acute scrotal / testicular pain',
+  kw:[[/testic|scrotal|scrotum/i,8],[/torsion/i,9],[/epididym/i,7],[/testicular (lump|mass|swelling)/i,8]],
+  urg:3,
+  primary:{study:'Scrotal ultrasound with colour Doppler', contrast:NONE, dose:0,
+    why:'Assesses perfusion, torsion and masses. Immediate if torsion is suspected.'},
+  pearls:['Suspected torsion is a SURGICAL diagnosis — imaging must NEVER delay theatre. Refer to urology first.',
+          'A testicular mass on ultrasound requires staging CT chest/abdomen/pelvis and tumour markers.'],
+  ref:'iRefer; BAUS'
+},
+{
+  id:'prostate', cat:'Urology', label:'Suspected prostate cancer',
+  kw:[[/prostate/i,9],[/\bpsa\b/i,8],[/\bluts\b|lower urinary tract symptom/i,4]],
+  urg:1,
+  primary:{study:'Multiparametric MRI prostate (mpMRI) before biopsy', contrast:GAD, dose:0,
+    why:'Pre-biopsy mpMRI reduces unnecessary biopsies and improves detection of significant disease (PI-RADS/Likert scoring).'},
+  addOn:[{study:'Bone scan or PSMA PET-CT', when:'High-risk disease — for skeletal and nodal staging'}],
+  pearls:['MRI must be performed BEFORE biopsy — post-biopsy haemorrhage degrades the study for 6 weeks.'],
+  ref:'NICE NG131'
+},
+
+/* ---------- MSK ---------- */
+{
+  id:'fracture', cat:'MSK', label:'Suspected fracture / limb trauma',
+  kw:[[/fracture/i,7],[/(injur|trauma).{0,20}(wrist|ankle|knee|shoulder|hip|elbow|foot|hand)/i,6],
+      [/fell.{0,25}(wrist|ankle|hip|arm|leg)/i,5],[/twisted (ankle|knee)/i,5],[/unable to weight ?bear/i,5]],
+  urg:2,
+  primary:{study:'Plain radiographs — minimum two orthogonal views', contrast:NONE, dose:0.01,
+    why:'First-line for all suspected limb fractures.'},
+  alts:[{s:'CT',w:'Complex or intra-articular fracture, or surgical planning'},
+        {s:'MRI',w:'Radiographs normal but clinical suspicion persists — occult hip, scaphoid or stress fracture'}],
+  pearls:['Suspected scaphoid fracture with normal radiographs → MRI (not repeat films at 10 days) where available.',
+          'Suspected hip fracture with normal radiographs → MRI within 24 hours; CT if MRI unavailable.',
+          'Apply the Ottawa ankle/knee rules before requesting.'],
+  ref:'NICE NG38; BOAST'
+},
+{
+  id:'osteomyelitis', cat:'MSK', label:'Suspected osteomyelitis / diabetic foot infection',
+  kw:[[/osteomyelitis/i,10],[/diabetic foot/i,8],[/(bone|deep) infection/i,6],
+      [/(ulcer|wound).{0,25}(probe to bone|exposed bone)/i,7],[/charcot/i,7]],
+  urg:2,
+  primary:{study:'MRI of the affected region with contrast', contrast:GAD, dose:0,
+    why:'Most sensitive and specific for marrow oedema, abscess and sinus tracts; defines the surgical extent.'},
+  alts:[{s:'Plain radiographs',w:'Always obtain first as a baseline — but changes lag 10–14 days behind disease'},
+        {s:'Labelled white cell scan or PET-CT',w:'MRI contraindicated, or metalwork causing artefact'}],
+  ref:'NICE NG19; IWGDF'
+},
+{
+  id:'septicjoint', cat:'MSK', label:'Suspected septic arthritis',
+  kw:[[/septic (arthritis|joint)/i,10],[/(hot|swollen).{0,20}joint.{0,20}(fever|pyrexi)/i,7],
+      [/joint (aspiration|effusion).{0,20}(fever|infection)/i,6]],
+  urg:3,
+  primary:{study:'Ultrasound of the joint with guided aspiration', contrast:NONE, dose:0,
+    why:'Confirms an effusion and allows immediate diagnostic aspiration — the definitive test.'},
+  alts:[{s:'MRI',w:'Deep joints (hip, sacroiliac, shoulder), or if concurrent osteomyelitis is suspected'}],
+  pearls:['This is a joint-destroying emergency. Aspirate and refer to orthopaedics — do not wait for imaging.'],
+  ref:'BSR; iRefer'
+},
+{
+  id:'softtissue', cat:'MSK', label:'Soft tissue lump / suspected sarcoma',
+  kw:[[/soft tissue (lump|mass|swelling)/i,9],[/sarcoma/i,9],[/lipoma/i,6],
+      [/(lump|mass).{0,25}(enlarging|growing|deep|painful)/i,6]],
+  urg:1,
+  primary:{study:'Ultrasound of the lump', contrast:NONE, dose:0,
+    why:'First-line for superficial lumps; distinguishes cystic from solid and vascularity.'},
+  addOn:[{study:'MRI with contrast', when:'Any lump that is deep to fascia, larger than 5 cm, enlarging, or painful — do not biopsy first'}],
+  pearls:['Refer to a specialist sarcoma centre BEFORE biopsy; an ill-planned biopsy tract compromises later surgery.'],
+  ref:'NICE NG12; BSG sarcoma'
+},
+{
+  id:'shoulder', cat:'MSK', label:'Shoulder pain / rotator cuff',
+  kw:[[/rotator cuff|supraspinatus/i,9],[/shoulder (pain|impingement)/i,7],
+      [/frozen shoulder|adhesive capsulitis/i,7]],
+  urg:0,
+  primary:{study:'Ultrasound shoulder', contrast:NONE, dose:0,
+    why:'Accurate, dynamic and inexpensive for rotator cuff tears and subacromial impingement.'},
+  alts:[{s:'MRI or MR arthrogram',w:'Suspected labral tear, instability, or surgical planning'},
+        {s:'Plain radiographs',w:'Baseline for calcific tendinopathy, arthropathy or trauma'}],
+  ref:'iRefer'
+},
+
+/* ---------- ONCOLOGY / GENERAL ---------- */
+{
+  id:'staging', cat:'Oncology', label:'Cancer staging / restaging',
+  kw:[[/stag(e|ing)/i,7],[/restag/i,8],[/known (cancer|malignancy).{0,30}(assess|progress|response)/i,6],
+      [/metastas|metastatic/i,6],[/\bpet\b|pet.?ct/i,7],[/treatment response|\brecist\b/i,6]],
+  urg:1,
+  primary:{study:'CT chest, abdomen and pelvis with IV contrast', contrast:CT_IV, dose:14,
+    why:'Standard baseline and response-assessment study for most solid tumours.'},
+  alts:[{s:'FDG PET-CT',w:'Nodal/distant staging where radical treatment is planned, or occult recurrence with rising markers'},
+        {s:'MRI',w:'Local staging of rectal, prostate, gynaecological, head and neck, or bone/soft tissue primaries'},
+        {s:'Bone scintigraphy',w:'Skeletal metastases screening (breast, prostate)'}],
+  pearls:['State the primary tumour, treatment given and the specific question — it determines the protocol.'],
+  ref:'Tumour-specific NICE/NCCN'
+},
+{
+  id:'puo', cat:'General', label:'Pyrexia of unknown origin / occult sepsis / weight loss',
+  kw:[[/\bpuo\b|pyrexia of unknown/i,10],[/(sepsis|infection).{0,25}(unknown|unclear|occult) (source|origin)/i,8],
+      [/unexplained weight loss/i,7],[/night sweats/i,5],[/(raised|elevated) (crp|inflammatory markers)/i,4],
+      [/occult malignancy|cancer of unknown primary|\bcup\b/i,8]],
+  urg:1,
+  primary:{study:'CT chest, abdomen and pelvis with IV contrast', contrast:CT_IV, dose:14,
+    why:'Broadest yield for occult malignancy, abscess or lymphadenopathy.'},
+  alts:[{s:'FDG PET-CT',w:'CT negative and PUO persists, or suspected large-vessel vasculitis'},
+        {s:'Echocardiography',w:'Suspected infective endocarditis'}],
+  pearls:['A chest radiograph and abdominal ultrasound are reasonable, cheaper first steps in the stable patient.'],
+  ref:'iRefer'
+},
+{
+  id:'breast', cat:'Breast', label:'Breast lump / suspected breast cancer',
+  kw:[[/breast\s+(lump|mass|swelling|thickening|change|pain|asymmetr|abscess)/i,9],
+      [/(lump|mass|swelling).{0,20}breast/i,8],
+      [/nipple (discharge|retraction|change|eczema|inversion)/i,8],
+      [/breast (cancer|screening|clinic|imaging)|mammogra/i,6],
+      [/mastalgia|mastitis/i,6],
+      [/\bbreast\b/i,4]],   // bare mention is supporting evidence only, not enough alone
+  urg:1,
+  primary:{study:'Refer to a one-stop breast clinic (triple assessment)', contrast:NONE, dose:0,
+    why:'Imaging alone is not appropriate — clinical examination, imaging and biopsy occur together.'},
+  alts:[{s:'Ultrasound breast and axilla',w:'Patients under 40, pregnancy or lactation'},
+        {s:'Mammography plus ultrasound',w:'Age 40 and over'},
+        {s:'MRI breast',w:'Lobular cancer, dense breasts, implants, or high-risk screening'}],
+  pearls:['Do not request breast imaging directly from primary care — use the suspected-cancer referral pathway.'],
+  ref:'NICE NG12'
+},
+{
+  id:'neck', cat:'Head&Neck', label:'Neck lump / thyroid nodule',
+  kw:[[/neck (lump|mass|swelling)/i,9],[/thyroid (nodule|lump|swelling)|goitre|goiter/i,9],
+      [/lymphadenopath.{0,20}neck|cervical lymph/i,7],[/hoarse|dysphoni/i,5]],
+  urg:1,
+  primary:{study:'Ultrasound neck with fine-needle aspiration as indicated', contrast:NONE, dose:0,
+    why:'First-line for thyroid and nodal assessment (U1–U5 classification), with same-visit sampling.'},
+  addOn:[{study:'CT neck and chest with contrast', when:'Suspected head and neck malignancy — for staging'},
+         {study:'MRI neck', when:'Tongue base, oropharyngeal or parotid primaries — better soft tissue detail'}],
+  pearls:['Persistent unexplained neck lump over 45, or hoarseness beyond 3 weeks → suspected-cancer pathway.',
+          'Avoid iodinated contrast if radioiodine treatment is likely — it blocks uptake for 6–8 weeks.'],
+  ref:'NICE NG12; BTA'
+},
+{
+  id:'trauma', cat:'Trauma', label:'Major / polytrauma', mandatoryContrast:true,
+  kw:[[/polytrauma|major trauma/i,10],[/\brta\b|road traffic|\bmva\b/i,7],
+      [/fall from height/i,7],
+      /* "stabbing" is a pain quality, not a mechanism — require a wound word
+         or the past tense, or "stabbing chest pain" triggers a trauma CT. */
+      [/\bstab(?:bing)?\s+(?:wound|injur)|\bstabbed\b|gunshot|penetrating\s+(?:injury|trauma|wound)/i,8],
+      [/multiple injur/i,7]],
+  urg:3,
+  primary:{study:'Whole-body CT (trauma protocol) with IV contrast', contrast:CT_IV, dose:20,
+    why:'Head-to-pelvis contrast-enhanced CT is standard in adult major trauma and reduces mortality.'},
+  pearls:['Activate the trauma team — imaging is part of a wider pathway, not a substitute for primary survey.',
+          'In children, tailor the coverage: whole-body CT is not the default because of the radiation burden.',
+          'Renal function is irrelevant to the decision here — proceed with contrast.'],
+  ref:'NICE NG39'
+},
+{
+  id:'paed_general', cat:'Paediatrics', label:'Paediatric imaging',
+  kw:[[/\b(child|infant|baby|toddler|neonate|paediatric|pediatric)\b/i,6],
+      [/\b\d{1,2} (month|week)s? old\b/i,5],[/intussusception/i,8],[/pyloric stenosis/i,8],
+      [/\bnai\b|non.?accidental/i,8]],
+  urg:2,
+  primary:{study:'Ultrasound (first-line for most paediatric indications)', contrast:NONE, dose:0,
+    why:'Children are markedly more radiosensitive and have longer to express stochastic risk.'},
+  alts:[{s:'MRI',w:'Cross-sectional detail needed — may require sedation or general anaesthetic in the under-6s'},
+        {s:'CT',w:'Only where it will genuinely change management, and with paediatric dose optimisation'}],
+  pearls:['Discuss all paediatric CT requests with a radiologist first.',
+          'Suspected non-accidental injury follows a strict skeletal survey protocol — involve safeguarding and radiology together.'],
+  ref:'RCR/RCPCH; iRefer'
+}
+];
+
+/* ============================================================
+   2. RENAL FUNCTION
+   ============================================================ */
+
+function ckdEpi2021(crUmol, age, sex){
+  if(!crUmol || !age || !sex) return null;
+  const scr = crUmol / 88.4;                       // µmol/L -> mg/dL
+  const k = sex === 'F' ? 0.7 : 0.9;
+  const a = sex === 'F' ? -0.241 : -0.302;
+  const e = 142 * Math.pow(Math.min(scr/k,1), a)
+                * Math.pow(Math.max(scr/k,1), -1.200)
+                * Math.pow(0.9938, age)
+                * (sex === 'F' ? 1.012 : 1);
+  return Math.round(e);
+}
+
+function ckdStage(e){
+  if(e === null) return {stage:'Unknown', tone:'warn'};
+  if(e >= 90) return {stage:'G1 — normal', tone:'ok'};
+  if(e >= 60) return {stage:'G2 — mildly reduced', tone:'ok'};
+  if(e >= 45) return {stage:'G3a — mild–moderate', tone:'ok'};
+  if(e >= 30) return {stage:'G3b — moderate–severe', tone:'warn'};
+  if(e >= 15) return {stage:'G4 — severe', tone:'red'};
+  return {stage:'G5 — kidney failure', tone:'red'};
+}
+
+/* Iodinated IV contrast advice.
+   `mandatory` = time-critical indication where withholding contrast is more
+   dangerous than the AKI risk; advice becomes mitigate-and-proceed, not defer. */
+function iodinatedAdvice(s, mandatory){
+  const e = s.egfr, out = [];
+  if(mandatory && (s.aki || (e !== null && e < 30))){
+    out.push({t:'a-red', h:'Renal impairment — but DO NOT delay or withhold contrast',
+      b:'Renal function is significantly impaired'
+        + (e !== null ? ' (eGFR ' + e + ')' : ' (AKI)')
+        + ', yet this is a time-critical, life-threatening indication. Post-contrast AKI is treatable; a missed diagnosis here is not. Proceed with the contrast-enhanced study now, using the lowest diagnostic volume, and manage renal risk afterwards: IV volume expansion, withhold nephrotoxics, recheck creatinine at 48–72 hours, and inform nephrology.'});
+    return out;
+  }
+  if(s.dialysis){
+    out.push({t:'a-warn', h:'Dialysis-dependent',
+      b:'Iodinated contrast may be given if the study is clinically necessary. There is no need to schedule an urgent extra dialysis session or to time the scan around dialysis. '
+        + (s.anuric ? 'The patient is anuric, so there is no residual renal function to protect.'
+                    : 'If there is significant residual urine output, discuss with nephrology — preserving it matters.')});
+    return out;
+  }
+  if(s.aki){
+    out.push({t:'a-red', h:'AKI / unstable renal function',
+      b:'Treat as high risk regardless of the quoted eGFR — eGFR equations are invalid when creatinine is not in steady state. Discuss with the radiologist: use a non-contrast alternative if one answers the question, otherwise give the minimum contrast volume with IV volume expansion.'});
+    return out;
+  }
+  if(e === null){
+    out.push({t:'a-warn', h:'No renal function available',
+      b:'For an elective contrast study, obtain a creatinine/eGFR first. For emergency or life-threatening indications (dissection, major trauma, stroke thrombectomy, mesenteric ischaemia) proceed without it — the risk of delay far exceeds the contrast risk. Screen for risk factors: age > 70, CKD, diabetes, heart failure, dehydration, nephrotoxic drugs, myeloma.'});
+    return out;
+  }
+  if(e >= 45){
+    out.push({t:'a-ok', h:'eGFR ' + e + ' — no contrast precautions required',
+      b:'Standard IV iodinated contrast may be given. Post-contrast AKI at this level of function is not meaningfully different from background risk. Ensure the patient is not dehydrated.'});
+  } else if(e >= 30){
+    out.push({t:'a-warn', h:'eGFR ' + e + ' — proceed with sensible precautions',
+      b:'IV iodinated contrast is generally acceptable. Ensure good oral or IV hydration, use the lowest diagnostic contrast volume, withhold non-essential nephrotoxics (NSAIDs, aminoglycosides) around the study, and avoid repeat contrast studies within 48–72 hours.'});
+  } else {
+    out.push({t:'a-red', h:'eGFR ' + e + ' — significant post-contrast AKI risk',
+      b:'Discuss with the radiologist BEFORE requesting. Prefer a non-contrast alternative (ultrasound, MRI, non-contrast CT) where it answers the question. If contrast is essential: IV volume expansion (e.g. 0.9% sodium chloride 1 mL/kg/h for 3–4 hours before and 4–6 hours after, adjusted for cardiac status), minimum contrast dose, and recheck creatinine at 48–72 hours.'});
+  }
+  if(s.myeloma && e !== null && e < 60){
+    out.push({t:'a-warn', h:'Myeloma / paraproteinaemia',
+      b:'Ensure the patient is well hydrated before contrast. Myeloma alone is not a contraindication, but combined with renal impairment and dehydration it raises risk — discuss with the radiologist.'});
+  }
+  if(s.transplant){
+    out.push({t:'a-warn', h:'Transplant or single kidney',
+      b:'Less renal reserve for any insult. Hydrate, minimise contrast volume, and inform the transplant team.'});
+  }
+  if(s.thyrotox){
+    out.push({t:'a-warn', h:'Active thyrotoxicosis',
+      b:'Iodinated contrast is relatively contraindicated and can precipitate thyroid storm. Discuss with endocrinology. Also avoid if radioiodine therapy or a thyroid uptake scan is planned within 6–8 weeks.'});
+  }
+  return out;
+}
+
+/* Metformin */
+function metforminAdvice(s){
+  if(!s.metformin) return null;
+  const e = s.egfr;
+  if(s.aki || (e !== null && e < 30))
+    return {t:'a-red', h:'Metformin — withhold',
+      b:'With eGFR below 30 or AKI, stop metformin at the time of contrast administration, withhold for 48 hours, and only restart once renal function has been rechecked and is stable.'};
+  if(e !== null && e >= 30)
+    return {t:'a-ok', h:'Metformin — no action needed',
+      b:'With eGFR of ' + e + ' and stable renal function, metformin does not need to be stopped for IV iodinated contrast.'};
+  return {t:'a-warn', h:'Metformin — renal function unknown',
+    b:'Check eGFR. If it cannot be obtained before the scan, withhold metformin for 48 hours afterwards and recheck renal function before restarting.'};
+}
+
+/* Gadolinium */
+function gadoliniumAdvice(s){
+  const e = s.egfr, out = [];
+  if(s.aki){
+    out.push({t:'a-red', h:'AKI — gadolinium caution',
+      b:'Avoid gadolinium unless essential. If unavoidable, use a group II macrocyclic agent at the lowest diagnostic dose and record the agent and dose. Consider whether a non-contrast MRI protocol would answer the question.'});
+    return out;
+  }
+  if(s.dialysis){
+    out.push({t:'a-warn', h:'Dialysis — gadolinium',
+      b:'Use a group II macrocyclic agent at the lowest diagnostic dose. Schedule haemodialysis as soon as possible after the scan (ideally within 2–3 hours), though evidence that this prevents NSF is limited. Never use a group I agent.'});
+    return out;
+  }
+  if(e === null){
+    out.push({t:'a-warn', h:'Renal function unknown — gadolinium',
+      b:'Obtain an eGFR before an elective contrast-enhanced MRI, particularly in patients over 60, with known CKD, diabetes, hypertension or hepatorenal syndrome.'});
+    return out;
+  }
+  if(e >= 30){
+    out.push({t:'a-ok', h:'eGFR ' + e + ' — gadolinium safe',
+      b:'Standard dosing of a group II macrocyclic agent (gadoterate, gadobutrol, gadoteridol) carries a negligible risk of nephrogenic systemic fibrosis.'});
+  } else {
+    out.push({t:'a-red', h:'eGFR ' + e + ' — gadolinium requires discussion',
+      b:'Nephrogenic systemic fibrosis risk. Use only a group II macrocyclic agent, at the lowest diagnostic dose, with a documented risk–benefit discussion and consent. Group I linear agents (gadodiamide, gadopentetate, gadoversetamide) are contraindicated. Consider a non-contrast MRI protocol or contrast-enhanced ultrasound instead.'});
+  }
+  return out;
+}
+
+/* ============================================================
+   3. INPUT NORMALISATION — abbreviations, spelling variants, typos
+
+   Runs BEFORE negation and matching. Three stages, in order:
+     (a) abbreviation expansion   — deterministic, full weight
+     (b) UK/US spelling variants  — deterministic, full weight
+     (c) fuzzy typo correction    — probabilistic, reduced weight
+
+   Only (c) is a guess, so only (c) is discounted and it is always shown
+   back to the user. Blind orthographic rules (e.g. rewriting every "hem"
+   to "haem") are deliberately NOT used — that would corrupt legitimate
+   words such as "hemiparesis". Known variants are mapped explicitly.
+   ============================================================ */
+
+const FUZZY_DISCOUNT = 0.85;
+
+/* Canonical clinical vocabulary, drawn from the rule base above. */
+const LEX = ("stroke thrombolysis thrombectomy hemiparesis hemiplegia hemianopia dysphasia aphasia "
++"dysarthria transient ischaemic amaurosis fugax thunderclap subarachnoid haemorrhage haematoma "
++"papilloedema intracranial migraine meningitis encephalitis seizure seizures convulsion convulsions "
++"epilepsy epileptic demyelination demyelinating sclerosis neuritis myelitis pituitary prolactin "
++"prolactinoma acromegaly cushing adenoma apoplexy hydrocephalus glioma meningioma metastases "
++"metastatic metastasis concussion contusion "
++"cauda equina saddle anaesthesia anaesthetic sciatica radiculopathy stenosis discitis "
++"spondylodiscitis osteomyelitis epidural abscess myeloma vertebral lumbar thoracic cervical sacral "
++"compression incontinence retention spondylolisthesis kyphosis scoliosis "
++"pulmonary embolism embolus embolic pleuritic dyspnoea breathless haemoptysis pneumonia "
++"consolidation empyema effusion pneumothorax bronchiectasis fibrosis interstitial sarcoidosis "
++"mesothelioma asbestos tuberculosis nodule nodules pneumonitis hypersensitivity atelectasis "
++"angina coronary ischaemia infarction infarct dissection aneurysm aortic claudication thrombosis "
++"thrombus endocarditis pericardial tamponade arrhythmia fibrillation carotid palpitations "
++"appendicitis appendix cholecystitis cholelithiasis choledocholithiasis gallstones gallstone "
++"biliary jaundice cholangitis pancreatitis amylase lipase diverticulitis diverticular perforation "
++"peritonitis obstruction mesenteric volvulus intussusception hernia cirrhosis hepatocellular "
++"hepatomegaly splenomegaly ascites haemangioma colitis crohn colorectal carcinoma enterography "
++"calprotectin melaena haematemesis dysphagia oesophageal gastric duodenal pyloric "
++"colic calculus calculi nephrolithiasis urolithiasis hydronephrosis haematuria pyelonephritis "
++"prostate prostatitis testicular torsion epididymitis scrotal varicocele cystoscopy urogram "
++"bladder ureteric ureter urethral renal nephropathy creatinine "
++"adnexal ovarian endometrial endometriosis fibroid leiomyoma ectopic menorrhagia postmenopausal "
++"pelvic ovary uterus uterine "
++"fracture fractured scaphoid dislocation tendinopathy rotator supraspinatus impingement arthritis "
++"arthropathy sarcoma lipoma cellulitis charcot avascular necrosis ligament meniscal septic "
++"malignancy malignant lymphadenopathy lymphoma leukaemia pyrexia neutropenic immunosuppressed "
++"cachexia staging restaging recurrence palliative tumour carcinoid "
++"gadolinium iodinated nephrogenic dialysis metformin anuric transplant paraproteinaemia "
++"thyrotoxicosis anticoagulated apixaban rivaroxaban warfarin clopidogrel "
++"vomiting nausea diarrhoea constipation rigors sepsis septic syncope collapse weakness numbness "
++"paraesthesia swelling tenderness distension bloating dysuria pregnancy pregnant breastfeeding "
++"claustrophobia pacemaker haemodynamically neurological abdominal "
++"penile testis testes scrotum perineal vulval labial inguinal umbilical femoral popliteal").split(/\s+/);
+const LEXSET = new Set(LEX);
+
+/* Ordinary words that must never be "corrected" into a diagnosis. */
+const STOP = new Set(("patient please severe sudden since chronic acute right left upper lower "
++"history known previous normal abnormal raised reduced recent worse unable following admitted "
++"referred review scan imaging request exclude query months weeks years hours female male "
++"background presents complains reports denies further assess assessment suspected possible "
++"likely unlikely ongoing persistent bilateral unilateral proximal distal anterior posterior "
++"medial lateral superior inferior chest abdomen pelvis spine brain heart liver kidney lung "
++"bowel breast neck shoulder elbow wrist ankle knee finger thumb "
+/* Pain-quality and descriptive words — these collide with disease terms
+   (e.g. "stabbing" is one edit from "staging") and must stay untouched. */
++"stabbing staining smelling smell smells burning aching throbbing crushing gnawing shooting "
++"cramping dragging tingling pulling tearing sharp dull constant intermittent radiating "
++"spreading settling worsening improving walking talking standing sitting lying moving "
++"feeling tired tiredness appetite sleeping").split(/\s+/));
+
+/* Known alternate spellings → canonical form used by the rules. */
+const VARIANTS = {
+  hemoptysis:'haemoptysis', hematuria:'haematuria', hematemesis:'haematemesis',
+  hemorrhage:'haemorrhage', hemorrhagic:'haemorrhagic', hematoma:'haematoma',
+  ischemic:'ischaemic', ischemia:'ischaemia', anemia:'anaemia', anemic:'anaemic',
+  edema:'oedema', esophageal:'oesophageal', esophagus:'oesophagus',
+  diarrhea:'diarrhoea', anesthesia:'anaesthesia', anesthetic:'anaesthetic',
+  pediatric:'paediatric', celiac:'coeliac', orthopedic:'orthopaedic',
+  leukemia:'leukaemia', dyspnea:'dyspnoea', tumor:'tumour', tumors:'tumours',
+  fetal:'foetal', gynecological:'gynaecological', papilledema:'papilloedema',
+  aneurism:'aneurysm', anuerysm:'aneurysm', diverticulits:'diverticulitis',
+  hemothorax:'haemothorax', melena:'melaena', paresthesia:'paraesthesia'
+};
+
+/* Abbreviations and shorthand common in referral text. */
+const ABBREV = [
+  [/\bsob\b/g,'breathless'], [/\bsoboe\b/g,'breathless on exertion'],
+  [/\bdib\b/g,'difficulty breathing'], [/\bloc\b/g,'loss of consciousness'],
+  [/\bn\s*[&+]\s*v\b/g,'nausea and vomiting'], [/\bd\s*[&+]\s*v\b/g,'diarrhoea and vomiting'],
+  [/\bpr\s+bleed(ing)?\b/g,'rectal bleeding'], [/\bpv\s+bleed(ing)?\b/g,'vaginal bleeding'],
+  [/\bwt\s+loss\b/g,'weight loss'], [/\bloa\b/g,'loss of appetite'],
+  [/#\s*nof\b/g,'fractured neck of femur'], [/#/g,' fracture '],
+  [/\babdo\b/g,'abdominal'], [/\bc\/o\b/g,'complains of'], [/\bo\/e\b/g,'on examination'],
+  [/\bhx\b/g,'history'], [/\bh\/o\b/g,'history of'], [/\bpmh\b/g,'past medical history'],
+  [/\bdx\b/g,'diagnosis'], [/\bix\b/g,'investigation'], [/\bsx\b/g,'symptoms'],
+  [/\bfx\b/g,'fracture'], [/\by\/?o\b/g,'year old'], [/\byrs?\b/g,'years'],
+  [/\bmi\b/g,'myocardial infarction'], [/\bihd\b/g,'ischaemic heart disease'],
+  [/\bnof\b/g,'neck of femur'], [/\buti\b/g,'urinary tract infection'],
+  [/\bcbd\b/g,'common bile duct'], [/\blft?s\b/g,'liver function tests'],
+  [/\bwcc\b/g,'white cell count'], [/\bt2dm\b/g,'diabetes'], [/\bdm\b/g,'diabetes']
+];
+
+/* Turn an abbreviation's regex source into something readable for display. */
+function abbrevLabel(src){
+  return String(src)
+    .replace(/\\b/g, '')
+    .replace(/\\s[*+]/g, ' ')
+    .replace(/\\\/\?/g, '/')
+    .replace(/\\\//g, '/')
+    .replace(/\[([^\]])[^\]]*\]/g, '$1')
+    .replace(/\(([^)]*)\)\??/g, '')
+    .replace(/[\\?]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/* Optimal string alignment (Damerau–Levenshtein with transposition),
+   with early exit once the budget is exceeded. */
+function osaDistance(a, b, max){
+  const m = a.length, n = b.length;
+  if(Math.abs(m - n) > max) return max + 1;
+  let d0 = new Array(n+1), d1 = new Array(n+1), d2 = new Array(n+1);
+  for(let j = 0; j <= n; j++) d1[j] = j;
+  for(let i = 1; i <= m; i++){
+    d2[0] = i;
+    let best = d2[0];
+    for(let j = 1; j <= n; j++){
+      const cost = a.charAt(i-1) === b.charAt(j-1) ? 0 : 1;
+      let v = Math.min(d1[j] + 1, d2[j-1] + 1, d1[j-1] + cost);
+      if(i > 1 && j > 1 && a.charAt(i-1) === b.charAt(j-2) && a.charAt(i-2) === b.charAt(j-1))
+        v = Math.min(v, d0[j-2] + 1);
+      d2[j] = v;
+      if(v < best) best = v;
+    }
+    if(best > max) return max + 1;
+    const t = d0; d0 = d1; d1 = d2; d2 = t;
+  }
+  return d1[n];
+}
+
+/* Returns a correction, or null if none is safe.
+   Guards: minimum length, length-scaled budget, first-character match for
+   2-edit corrections, and no correction at all when two different lexicon
+   terms tie — an ambiguous guess is worse than no guess. */
+function fuzzyCorrect(tok){
+  if(tok.length < 5) return null;
+  if(LEXSET.has(tok) || STOP.has(tok)) return null;
+  /* Two-edit corrections are reserved for long words. Real single typos are
+     almost always one edit; allowing two on medium-length words produced
+     false corrections such as "stabbing" -> "staging". */
+  const max = tok.length >= 10 ? 2 : 1;
+  let best = null, bestD = max + 1, tied = false;
+  for(let i = 0; i < LEX.length; i++){
+    const w = LEX[i];
+    if(Math.abs(w.length - tok.length) > max) continue;
+    const d = osaDistance(tok, w, max);
+    if(d > max) continue;
+    if(d >= 2 && tok.charAt(0) !== w.charAt(0)) continue;
+    if(d < bestD){ bestD = d; best = w; tied = false; }
+    else if(d === bestD && w !== best) tied = true;
+  }
+  return (!best || tied) ? null : best;
+}
+
+/* Full pipeline. Returns the rewritten text, a mask marking characters that
+   came from a FUZZY correction, and the list of changes for display. */
+function preprocess(raw){
+  let t = String(raw).toLowerCase();
+  const notes = [];
+
+  ABBREV.forEach(pair => {
+    const re = pair[0];
+    re.lastIndex = 0;
+    if(re.test(t)){
+      re.lastIndex = 0;
+      const before = t;
+      t = t.replace(re, pair[1]);
+      if(before !== t) notes.push({from:abbrevLabel(re.source), to:pair[1].trim(), kind:'abbreviation'});
+    }
+  });
+
+  let out = '', flags = [];
+  const append = (s, isFuzzy) => {
+    out += s;
+    for(let i = 0; i < s.length; i++) flags.push(isFuzzy ? 1 : 0);
+  };
+
+  const re = /[a-z]+/g;
+  let last = 0, m;
+  while((m = re.exec(t))){
+    append(t.slice(last, m.index), false);
+    const tok = m[0];
+    let rep = Object.prototype.hasOwnProperty.call(VARIANTS, tok) ? VARIANTS[tok] : null;
+    let kind = rep ? 'spelling variant' : null;
+    if(!rep){
+      const f = fuzzyCorrect(tok);
+      if(f){ rep = f; kind = 'typo'; }
+    }
+    append(rep || tok, kind === 'typo');
+    if(rep) notes.push({from:tok, to:rep, kind:kind});
+    last = m.index + tok.length;
+  }
+  append(t.slice(last), false);
+
+  /* de-duplicate */
+  const seen = {}, uniq = [];
+  notes.forEach(nt => {
+    const k = nt.kind + '|' + nt.from + '|' + nt.to;
+    if(!seen[k]){ seen[k] = 1; uniq.push(nt); }
+  });
+
+  return {text:out, fuzz:Uint8Array.from(flags), notes:uniq};
+}
+
+/* ============================================================
+   4. NEGATION DETECTION  (NegEx-style, deliberately conservative)
+
+   Bias: it is far safer to MISS a negation (and over-suggest a scan,
+   which a radiologist then vets) than to wrongly negate a finding and
+   suppress a scan that was needed. Ambiguous cues are therefore left out.
+   ============================================================ */
+
+/* Phrases that look like negations but are actually REQUESTS to investigate,
+   or double negations. Protected: no cue may fire inside them. */
+const NEG_PSEUDO = [
+  /\b(?:to\s+)?rules?\s+out\b/gi,
+  /\bruling\s+out\b/gi,
+  /\br\s*\/\s*o\b/gi,
+  /\b(?:to\s+)?exclude\b/gi,               // "exclude PE" = please look for it
+  /\bcannot\s+(?:be\s+)?(?:exclud\w*|rule[d]?\s*out)\b/gi,
+  /\b(?:can'?t|could\s*n[o']?t|couldn'?t|unable\s+to|not)\s+(?:be\s+)?(?:exclud\w*|rule[d]?\s*out)\b/gi,
+  /\bnot\s+only\b/gi,
+  /\bno\s+(?:change|increase|decrease|new|further|improvement|response)\b/gi,
+  /\bno\s+(?:obvious|clear|definite|apparent)\s+(?:cause|source|focus|origin)\b/gi,
+  /\bno\s+known\s+(?:drug\s+)?allerg\w*/gi,
+  /\bnot\s+(?:sure|certain|clear)\b/gi
+];
+
+/* Forward-scope cues: negate what FOLLOWS, e.g. "no chest pain" */
+const NEG_FWD = /\b(?:no|not|without|denies|denied|denying|nil|absent|absence\s+of|negative\s+for|never\s+had|has\s+not\s+had|did\s+not\s+have|does\s+not\s+have|doesn'?t\s+have|free\s+of)\b/gi;
+
+/* Backward-scope cues: negate what PRECEDES, e.g. "PE ruled out" */
+const NEG_BWD = /\b(?:ruled\s+out|excluded|was\s+negative|were\s+negative|is\s+negative|not\s+present|not\s+seen|not\s+identified|not\s+demonstrated)\b/gi;
+
+/* Historical cues: what follows is BACKGROUND history, not the presenting
+   complaint. Such terms still count, but at reduced weight, so that
+   "headache ... known breast cancer" is read as a headache referral with a
+   cancer history rather than as a breast referral. */
+const HIST_FWD = /\b(?:known|history\s+of|hx\s+of|h\/o|previous(?:ly)?|past|background\s+of|longstanding|long[-\s]standing|prior|treated\s+for|on\s+treatment\s+for|diagnosed\s+with|remote)\b/gi;
+const HIST_WINDOW = 30;
+const HIST_DISCOUNT = 0.4;
+
+/* Scope stops here — a new clause or an explicitly positive assertion */
+const NEG_TERM_SRC = "\\b(?:but|however|although|though|except|apart\\s+from|otherwise|whilst|while|positive\\s+for|presents?\\s+with|complains?\\s+of|reports?|now\\s+has|does\\s+have)\\b|[.;:\\n\\?]";
+const NEG_WINDOW = 45;   // characters ≈ 7 words, the classic NegEx scope
+
+/* History scope is tighter than negation scope: it also ends at a comma and at
+   any word that switches the narrative back to the present. */
+const HIST_TERM_SRC = NEG_TERM_SRC.replace("[.;:\\n\\?]", "[.;:,\\n\\?]")
+  + "|\\b(?:now|today|currently|acutely|new|recent(?:ly)?|since|this\\s+(?:morning|week|admission))\\b";
+
+function buildNegationMask(text){
+  const n = text.length;
+  const mask = new Uint8Array(n);
+  const prot = new Uint8Array(n);
+  const phrases = [];
+  let m;
+
+  NEG_PSEUDO.forEach(re => {
+    re.lastIndex = 0;
+    while((m = re.exec(text))){
+      if(!m[0].length){ re.lastIndex++; continue; }
+      for(let i = m.index; i < m.index + m[0].length; i++) prot[i] = 1;
+    }
+  });
+  const protected_ = (s,e) => { for(let i=s;i<e;i++) if(prot[i]) return true; return false; };
+
+  NEG_FWD.lastIndex = 0;
+  while((m = NEG_FWD.exec(text))){
+    if(!m[0].length){ NEG_FWD.lastIndex++; continue; }
+    const s = m.index, e = s + m[0].length;
+    if(protected_(s,e)) continue;
+    let stop = Math.min(n, e + NEG_WINDOW);
+    const t = text.slice(e, stop).search(new RegExp(NEG_TERM_SRC, 'i'));
+    if(t >= 0) stop = e + t;
+    for(let i=e;i<stop;i++) mask[i] = 1;
+    if(stop > e) phrases.push(text.slice(s, stop).trim());
+  }
+
+  NEG_BWD.lastIndex = 0;
+  while((m = NEG_BWD.exec(text))){
+    if(!m[0].length){ NEG_BWD.lastIndex++; continue; }
+    const s = m.index, e = s + m[0].length;
+    if(protected_(s,e)) continue;
+    let start = Math.max(0, s - NEG_WINDOW);
+    const seg = text.slice(start, s);
+    const term = new RegExp(NEG_TERM_SRC, 'gi');
+    let last = -1, mm;
+    while((mm = term.exec(seg))){
+      if(!mm[0].length){ term.lastIndex++; continue; }
+      last = mm.index + mm[0].length;
+    }
+    if(last >= 0) start += last;
+    for(let i=start;i<s;i++) mask[i] = 1;
+    if(s > start) phrases.push(text.slice(start, e).trim());
+  }
+
+  /* Historical context — a separate, softer mask. Scope begins AFTER the cue,
+     so a keyword that deliberately starts with the cue (e.g. the spinal
+     metastases rule's "known cancer ... back pain") keeps its full weight. */
+  const hist = new Uint8Array(n);
+  HIST_FWD.lastIndex = 0;
+  while((m = HIST_FWD.exec(text))){
+    if(!m[0].length){ HIST_FWD.lastIndex++; continue; }
+    const s = m.index, e = s + m[0].length;
+    let stop = Math.min(n, e + HIST_WINDOW);
+    const t = text.slice(e, stop).search(new RegExp(HIST_TERM_SRC, 'i'));
+    if(t >= 0) stop = e + t;
+    for(let i=e;i<stop;i++) hist[i] = 1;
+  }
+
+  return {mask, hist, phrases};
+}
+
+/* A keyword counts only if it occurs at least once OUTSIDE a negated span.
+   The decision uses the START of the match, so a keyword that legitimately
+   contains "not" (e.g. "not opened bowels") is not self-negating. */
+function matchKeyword(text, re, mask, hist, fuzz){
+  const g = new RegExp(re.source, re.flags.indexOf('g') >= 0 ? re.flags : re.flags + 'g');
+  const touchesFuzzy = (s, e) => {
+    if(!fuzz) return false;
+    for(let i = s; i < e; i++) if(fuzz[i]) return true;
+    return false;
+  };
+  let m, negHit = null, histHit = null;
+  while((m = g.exec(text))){
+    if(!m[0].length){ g.lastIndex++; continue; }
+    if(mask[m.index]){ if(!negHit) negHit = m[0].trim(); continue; }
+    /* Historical only if the WHOLE match sits inside the history span. A
+       co-occurrence keyword that reaches out of it (e.g. "known prostate
+       cancer ... back pain") is describing the present problem, so it counts
+       in full. */
+    if(hist && hist[m.index] && hist[m.index + m[0].length - 1]){
+      if(!histHit) histHit = m[0].trim();
+      continue;
+    }
+    return {hit:m[0].trim(), negated:false, historical:false,
+            fuzzy:touchesFuzzy(m.index, m.index + m[0].length)};
+  }
+  if(histHit) return {hit:histHit, negated:false, historical:true, fuzzy:false};
+  return negHit ? {hit:negHit, negated:true, historical:false, fuzzy:false} : null;
+}
+
+/* ============================================================
+   5. MATCHING
+   ============================================================ */
+
+function scoreRules(text, forcedId, mask, hist, fuzz){
+  if(!text.trim()) return [];
+  if(!mask){ const n = buildNegationMask(text); mask = n.mask; hist = n.hist; }
+  const scored = RULES.map(r => {
+    let sc = 0; const hits = [], negHits = [], histHits = [];
+    r.kw.forEach(([re, w]) => {
+      const res = matchKeyword(text, re, mask, hist, fuzz);
+      if(!res) return;
+      if(res.negated){ negHits.push(res.hit); return; }
+      if(res.historical){ sc += w * HIST_DISCOUNT; histHits.push(res.hit); return; }
+      sc += res.fuzzy ? w * FUZZY_DISCOUNT : w;
+      hits.push(res.hit);
+    });
+    return {rule:r, score:Math.round(sc*10)/10, hits, negHits, histHits};
+  }).filter(x => x.score >= 5).sort((a,b) => b.score - a.score);
+
+  if(forcedId){
+    const i = scored.findIndex(x => x.rule.id === forcedId);
+    if(i > 0) scored.unshift(scored.splice(i,1)[0]);
+    else if(i === -1){
+      const r = RULES.find(x => x.id === forcedId);
+      if(r) scored.unshift({rule:r, score:0, hits:['manually selected'], negHits:[]});
+    }
+    if(scored.length) scored[0].forced = true;
+  }
+  return scored;
+}
+
+const URG_LABEL = ['Routine','Expedited (2 weeks)','Urgent (within 24 hours)','Immediate / emergency'];
+
+function doseText(mSv){
+  if(!mSv) return 'No ionising radiation';
+  const months = mSv / 2.7 * 12;
+  const eq = months < 1 ? Math.round(months * 30) + ' days'
+           : months < 24 ? Math.round(months) + ' months'
+           : (months/12).toFixed(1) + ' years';
+  return '≈ ' + mSv + ' mSv (about ' + eq + ' of natural background radiation)';
+}
+
+/* ============================================================
+   6. RENDER
+   ============================================================ */
+
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function alertHTML(a){
+  const ic = a.t==='a-red'?'!':a.t==='a-warn'?'▲':a.t==='a-ok'?'✓':'i';
+  return '<div class="alert '+a.t+'"><span class="ic">'+ic+'</span><div><b>'+esc(a.h)+'</b>'+esc(a.b)+'</div></div>';
+}
+
+function render(state, forcedId){
+  const neg = buildNegationMask(state.indication);
+  const matches = scoreRules(state.indication, forcedId, neg.mask, neg.hist, state.fuzz);
+
+  const notes = state.notes || [];
+  const corrHTML = notes.length
+    ? '<section class="blk"><h3>Interpreted wording</h3>'
+      + '<div class="alert a-info"><span class="ic">i</span><div>'
+      + '<b>The text was normalised before matching</b>'
+      + notes.map(nt => '<code>' + esc(nt.from) + '</code> &rarr; <code>' + esc(nt.to)
+                        + '</code> <span style="opacity:.7">(' + esc(nt.kind) + ')</span>').join(', &nbsp;')
+      + '. Typo corrections are a best guess and count at slightly reduced weight &mdash; '
+      + 'check them, and rephrase if any is wrong.'
+      + '</div></div></section>'
+    : '';
+
+  const negHTML = neg.phrases.length
+    ? '<section class="blk"><h3>Read as negative / excluded</h3>'
+      + '<div class="alert a-info"><span class="ic">i</span><div>'
+      + '<b>These phrases were treated as negated and did NOT count towards the match</b>'
+      + neg.phrases.map(p => '<code>' + esc(p) + '</code>').join(', ')
+      + '. Negation detection is a text heuristic — if it has misread your wording, rephrase '
+      + 'or pick the correct scenario from the alternatives below.'
+      + '</div></div></section>'
+    : '';
+
+  /* ---- global safety alerts computed for any recommendation ---- */
+  const top = matches[0];
+  const html = [];
+
+  html.push('<div class="card">');
+
+  if(!top){
+    html.push('<div class="rec-head"><div><div class="ind">No confident match</div>'
+      + '<h2>More clinical detail needed</h2>'
+      + '<p class="sub">The indication text did not match a recognised scenario strongly enough to recommend a specific study.</p></div></div>');
+    html.push('<section class="blk"><h3>What to add</h3><ul class="clean">'
+      + '<li>The <b>symptom, its site and duration</b> — e.g. "right iliac fossa pain for 18 hours".</li>'
+      + '<li>The <b>specific clinical question</b> — e.g. "exclude obstructing calculus", not "abdominal pain ?cause".</li>'
+      + '<li>Relevant <b>history</b>: known malignancy, immunosuppression, surgery, anticoagulation.</li>'
+      + '<li>Key <b>examination and laboratory findings</b>.</li></ul></section>');
+    html.push(corrHTML);
+    html.push(negHTML);
+    html.push('<section class="blk"><h3>General principles while you refine the request</h3><ul class="clean">'
+      + '<li>Ask what you will <b>do differently</b> depending on the result. If nothing changes, the scan is not indicated.</li>'
+      + '<li>Prefer <b>ultrasound or MRI</b> where they answer the question, especially in patients under 40 and in pregnancy.</li>'
+      + '<li>A well-written question gets a well-targeted protocol. "?cause" gets a generic scan.</li>'
+      + '<li>If genuinely uncertain, telephone the duty radiologist — that conversation is quicker than a rejected request.</li></ul></section>');
+    html.push('</div>');
+    document.getElementById('out').innerHTML = html.join('');
+    return null;
+  }
+
+  const r = top.rule;
+  const conf = top.forced ? 'Manually selected'
+             : top.score >= 14 ? 'High' : top.score >= 9 ? 'Moderate' : 'Low';
+
+  /* determine effective study after modifiers */
+  const study = r.primary.study, contrast = r.primary.contrast, dose = r.primary.dose;
+
+  /* ---- header ---- */
+  html.push('<div class="rec-head"><div>'
+    + '<div class="ind">' + esc(r.cat) + ' &middot; ' + esc(r.label) + '</div>'
+    + '<h2>' + esc(study) + '</h2>'
+    + '<p class="sub">' + esc(r.primary.why) + '</p>'
+    + '</div><div class="conf">Match confidence: ' + conf + '</div></div>');
+
+  /* ---- tags ---- */
+  const tags = [];
+  tags.push('<span class="tag t-blue">' + (contrast===CT_IV ? 'IV iodinated contrast'
+            : contrast===GAD ? 'IV gadolinium' : 'No contrast') + '</span>');
+  tags.push('<span class="tag ' + (dose ? (dose>=10?'t-red':dose>=3?'t-warn':'t-grey') : 't-ok') + '">'
+            + doseText(dose) + '</span>');
+  const sugg = r.urg;
+  tags.push('<span class="tag ' + (sugg>=3?'t-red':sugg>=2?'t-warn':'t-grey') + '">Suggested timing: '
+            + URG_LABEL[sugg] + '</span>');
+  html.push('<div>' + tags.join('') + '</div>');
+
+  /* ---- alerts ---- */
+  const alerts = [];
+
+  if(state.urgency < sugg){
+    alerts.push({t:'a-red', h:'Urgency mismatch',
+      b:'You selected "' + URG_LABEL[state.urgency] + '" but this indication normally warrants "' + URG_LABEL[sugg]
+        + '". If the clinical picture fits, upgrade the request and telephone the radiology department.'});
+  } else if(state.urgency > sugg + 1){
+    alerts.push({t:'a-info', h:'Urgency higher than typical',
+      b:'You selected "' + URG_LABEL[state.urgency] + '"; this indication is usually "' + URG_LABEL[sugg]
+        + '". That may well be right for this patient — state the reason on the request so it is not downgraded at vetting.'});
+  }
+
+  if(state.pregnant){
+    if(dose > 0.5){
+      alerts.push({t:'a-red', h:'Pregnancy — ionising radiation',
+        b:'The recommended study delivers a meaningful dose. Seek a non-ionising alternative (ultrasound or MRI without gadolinium) wherever it answers the question. If CT is genuinely necessary it should not be withheld — fetal risk from a single diagnostic CT is small and far outweighed by a missed maternal diagnosis — but it must be discussed with the radiologist, justified in writing, and consented.'});
+    } else {
+      alerts.push({t:'a-ok', h:'Pregnancy — study is safe',
+        b:'The recommended study involves no ionising radiation and is appropriate in pregnancy.'});
+    }
+    if(contrast === GAD){
+      alerts.push({t:'a-red', h:'Gadolinium in pregnancy',
+        b:'Gadolinium crosses the placenta and should be avoided unless the benefit clearly outweighs the risk. Request a non-contrast MRI protocol and discuss with the radiologist.'});
+    }
+    if(contrast === CT_IV){
+      alerts.push({t:'a-warn', h:'Iodinated contrast in pregnancy',
+        b:'Iodinated contrast may be given when necessary. Check neonatal thyroid function in the first week of life.'});
+    }
+  } else if(state.sex === 'F' && state.age >= 12 && state.age <= 55 && dose > 0.5){
+    alerts.push({t:'a-warn', h:'Confirm pregnancy status',
+      b:'Female of reproductive age receiving a study with ionising radiation to the abdomen or pelvis. Ask and record the date of the last menstrual period, and apply local pregnancy rules (IR(ME)R) before the appointment.'});
+  }
+
+  if(state.breastfeeding && contrast !== NONE){
+    alerts.push({t:'a-ok', h:'Breastfeeding',
+      b:'Both iodinated and gadolinium contrast agents pass into breast milk in negligible quantities. Breastfeeding can continue uninterrupted. Nuclear medicine studies are different — check the specific agent.'});
+  }
+
+  if(contrast === CT_IV) iodinatedAdvice(state, r.mandatoryContrast).forEach(a => alerts.push(a));
+  if(contrast === GAD)   gadoliniumAdvice(state).forEach(a => alerts.push(a));
+
+  /* No contrast needed and renal function poor — say so explicitly, it is reassuring */
+  if(contrast === NONE && (state.aki || (state.egfr !== null && state.egfr < 45))){
+    const rf = (state.egfr !== null && state.egfr < 45)
+      ? 'the reduced renal function (eGFR ' + state.egfr + ')'
+      : 'the unstable renal function';
+    alerts.push({t:'a-ok', h:'No contrast required',
+      b:'The recommended study needs no iodinated contrast or gadolinium, so ' + rf
+        + ' does not restrict it. Metformin does not need to be withheld.'});
+  }
+  const met = (contrast === CT_IV) ? metforminAdvice(state) : null;
+  if(met) alerts.push(met);
+
+  if(state.contrastAllergy && contrast !== NONE){
+    alerts.push({t:'a-warn', h:'Previous contrast reaction',
+      b:'Document exactly what happened (rash versus bronchospasm versus anaphylaxis), which agent, and when. Mild reactions rarely preclude re-exposure with a different agent. Severe reactions require discussion with the radiologist and consideration of an alternative modality; routine steroid premedication is no longer recommended in most guidance.'});
+  }
+  if(state.mriUnsafe && (contrast === GAD || /MRI|MR |MRCP|enterograph/i.test(study))){
+    alerts.push({t:'a-red', h:'MRI safety',
+      b:'An implant or metal fragment has been flagged and the recommended study is an MRI. Most modern pacemakers and ICDs are MR-conditional but require a specific pathway and cardiac physiology support. Complete the MRI safety questionnaire and give the exact device model on the request. Consider the listed CT alternative if the answer is needed quickly.'});
+  }
+  if(state.claustro && /MRI|MR |MRCP|enterograph/i.test(study)){
+    alerts.push({t:'a-warn', h:'Claustrophobia',
+      b:'Consider prescribing oral anxiolysis for the appointment, request a wide-bore scanner if available, or discuss whether CT would answer the question. Flag it on the request so an appropriate slot is booked.'});
+  }
+  if(state.unwell && /MRI|MR enterograph|MRCP/i.test(study)){
+    alerts.push({t:'a-warn', h:'Haemodynamic instability',
+      b:'MRI is a poor environment for an unstable patient — long acquisition, limited monitoring and restricted access. CT is almost always the right choice here. Ensure an appropriate escort accompanies the patient.'});
+  }
+  if(state.age && state.age < 16 && dose >= 3){
+    alerts.push({t:'a-warn', h:'Paediatric radiation dose',
+      b:'This patient is ' + state.age + ' years old and the study carries a significant dose. Children are considerably more radiosensitive. Discuss with a radiologist whether ultrasound or MRI can answer the question, and ensure a paediatric-optimised protocol is used if CT proceeds.'});
+  }
+  if(state.anticoag && /aspirat|biopsy|drainage|guided/i.test(study + JSON.stringify(r.alts||[]))){
+    alerts.push({t:'a-warn', h:'Anticoagulation and intervention',
+      b:'An image-guided procedure may follow. Record the agent, the indication and the time of the last dose, and check the local peri-procedural bridging policy.'});
+  }
+
+  if(alerts.length){
+    html.push('<section class="blk"><h3>Safety &amp; renal considerations</h3>' + alerts.map(alertHTML).join('') + '</section>');
+  }
+
+  /* ---- add-on studies ---- */
+  if(r.addOn && r.addOn.length){
+    html.push('<section class="blk"><h3>Consider adding</h3><table class="alt"><tbody>'
+      + r.addOn.map(a => '<tr><td>' + esc(a.study) + '</td><td>' + esc(a.when) + '</td></tr>').join('')
+      + '</tbody></table></section>');
+  }
+
+  /* ---- alternatives ---- */
+  if(r.alts && r.alts.length){
+    html.push('<section class="blk"><h3>Alternatives</h3><table class="alt">'
+      + '<thead><tr><th>Study</th><th>When to choose it instead</th></tr></thead><tbody>'
+      + r.alts.map(a => '<tr><td>' + esc(a.s) + '</td><td>' + esc(a.w) + '</td></tr>').join('')
+      + '</tbody></table></section>');
+  }
+
+  /* ---- pearls ---- */
+  if(r.pearls && r.pearls.length){
+    html.push('<section class="blk"><h3>Key points</h3><ul class="clean">'
+      + r.pearls.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul></section>');
+  }
+
+  /* ---- input-interpretation transparency ---- */
+  html.push(corrHTML);
+  html.push(negHTML);
+
+  /* ---- matched terms + differentials ---- */
+  html.push('<section class="blk"><h3>Why this was suggested</h3>'
+    + '<p style="margin:0 0 8px;font-size:13.5px;color:var(--muted)">Matched terms: '
+    + top.hits.slice(0,8).map(h => '<code>' + esc(h) + '</code>').join(', ')
+    + '. Guideline basis: ' + esc(r.ref) + '.</p>'
+    + ((top.negHits && top.negHits.length)
+        ? '<p style="margin:0 0 8px;font-size:13.5px;color:var(--muted)">Ignored as negated: '
+          + top.negHits.map(h => '<code>' + esc(h) + '</code>').join(', ') + '.</p>'
+        : '')
+    + ((top.histHits && top.histHits.length)
+        ? '<p style="margin:0 0 8px;font-size:13.5px;color:var(--muted)">Counted at reduced weight as background history: '
+          + top.histHits.map(h => '<code>' + esc(h) + '</code>').join(', ') + '.</p>'
+        : ''));
+  if(matches.length > 1){
+    html.push('<p style="margin:0 0 6px;font-size:13.5px;color:var(--muted)">Other scenarios your text also matched:</p>'
+      + '<div class="diffs">' + matches.slice(1,5).map(m =>
+          '<span class="diff" data-id="' + m.rule.id + '">' + esc(m.rule.label) + '</span>').join('') + '</div>');
+  }
+  html.push('</section>');
+
+  html.push('</div>'); // end card
+
+  /* ---- request text ---- */
+  const reqLines = [];
+  reqLines.push('REQUESTED EXAMINATION: ' + study);
+  if(r.addOn && r.addOn.length) reqLines.push('CONSIDER ALSO: ' + r.addOn.map(a=>a.study).join('; '));
+  reqLines.push('URGENCY: ' + URG_LABEL[Math.max(state.urgency, 0)]);
+  reqLines.push('');
+  reqLines.push('CLINICAL INDICATION:');
+  reqLines.push(state.indicationRaw || '(not entered)');
+  reqLines.push('');
+  reqLines.push('SPECIFIC QUESTION: ' + r.label);
+  reqLines.push('');
+  reqLines.push('PATIENT FACTORS:');
+  reqLines.push('  Age: ' + (state.age || 'not stated') + (state.sex ? '   Sex: ' + (state.sex==='F'?'Female':'Male') : ''));
+  if(state.weight) reqLines.push('  Weight: ' + state.weight + ' kg');
+  reqLines.push('  Renal function: ' + (state.egfr !== null ? 'eGFR ' + state.egfr + ' mL/min/1.73m2 (' + ckdStage(state.egfr).stage + ')' : 'not available')
+      + (state.crText ? '  [creatinine ' + state.crText + ']' : ''));
+  const flags = [];
+  if(state.aki) flags.push('AKI / unstable renal function');
+  if(state.dialysis) flags.push('on dialysis' + (state.anuric ? ', anuric' : ''));
+  if(state.metformin) flags.push('on metformin');
+  if(state.transplant) flags.push('transplant / single kidney');
+  if(state.myeloma) flags.push('myeloma / paraproteinaemia');
+  if(state.pregnant) flags.push('PREGNANT / possibly pregnant');
+  if(state.breastfeeding) flags.push('breastfeeding');
+  if(state.contrastAllergy) flags.push('PREVIOUS CONTRAST REACTION — details required');
+  if(state.mriUnsafe) flags.push('implant / metal — MRI safety check required');
+  if(state.claustro) flags.push('claustrophobia');
+  if(state.thyrotox) flags.push('active thyrotoxicosis');
+  if(state.anticoag) flags.push('anticoagulated');
+  if(state.unwell) flags.push('haemodynamically unstable');
+  reqLines.push('  Flags: ' + (flags.length ? flags.join('; ') : 'none recorded'));
+  reqLines.push('');
+  reqLines.push('CONTRAST: ' + (contrast===CT_IV ? 'IV iodinated contrast required'
+                : contrast===GAD ? 'IV gadolinium required (group II macrocyclic agent)'
+                : 'None required'));
+  if(met) reqLines.push('METFORMIN: ' + met.h.replace('Metformin — ',''));
+  const reqText = reqLines.join('\n');
+
+  html.push('<div class="card">'
+    + '<section class="blk" style="margin-top:0"><h3>Draft request text</h3>'
+    + '<pre class="req" id="reqText">' + esc(reqText) + '</pre>'
+    + '<div class="btnrow" style="margin-top:10px">'
+    + '<button type="button" class="ghost" id="copyBtn">Copy to clipboard</button>'
+    + '<button type="button" class="ghost" onclick="window.print()">Print</button>'
+    + '</div></section></div>');
+
+  document.getElementById('out').innerHTML = html.join('');
+
+  document.getElementById('copyBtn').addEventListener('click', function(){
+    navigator.clipboard.writeText(reqText).then(() => {
+      this.textContent = 'Copied';
+      setTimeout(() => this.textContent = 'Copy to clipboard', 1600);
+    }).catch(() => { this.textContent = 'Select the text above to copy'; });
+  });
+
+  document.querySelectorAll('.diff').forEach(el => {
+    el.addEventListener('click', () => render(state, el.dataset.id));
+  });
+
+  return {rule:r, contrast:contrast};
+}
+
+/* ============================================================
+   7. USAGE LOG
+
+   Counts uses of "Recommend imaging" in this browser's localStorage.
+
+   PRIVACY: no patient data is recorded — not the indication text, not age,
+   not renal values. Each entry holds only a timestamp, the matched scenario
+   id and category, the requested urgency, and the contrast type. Nothing is
+   transmitted anywhere; it is local to this browser profile on this device.
+   ============================================================ */
+
+const LOG_KEY = 'rra.usage.v1';
+let memLog = null;               // fallback when localStorage is unavailable
+
+function logAvailable(){
+  try{
+    localStorage.setItem('rra.probe','1');
+    localStorage.removeItem('rra.probe');
+    return true;
+  }catch(e){ return false; }
+}
+const LOG_OK = logAvailable();
+
+function loadLog(){
+  if(!LOG_OK) return memLog || (memLog = {events:[]});
+  try{
+    const raw = localStorage.getItem(LOG_KEY);
+    const p = raw ? JSON.parse(raw) : null;
+    return (p && Array.isArray(p.events)) ? p : {events:[]};
+  }catch(e){ return {events:[]}; }
+}
+
+function saveLog(l){
+  if(!LOG_OK){ memLog = l; return; }
+  try{ localStorage.setItem(LOG_KEY, JSON.stringify(l)); }catch(e){ /* quota — ignore */ }
+}
+
+function logUse(entry){
+  const l = loadLog();
+  l.events.push(entry);
+  if(l.events.length > 5000) l.events = l.events.slice(-5000);   // cap growth
+  saveLog(l);
+  paintCounter();
+}
+
+function paintCounter(){
+  document.getElementById('counterN').textContent = loadLog().events.length;
+}
+
+const dayKey = ts => { const d = new Date(ts); return d.getFullYear() + '-'
+  + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+
+function usageStats(){
+  const ev = loadLog().events;
+  const today = dayKey(Date.now());
+  const now = Date.now(), DAY = 86400000;
+  const byDay = {}, byRule = {}, byUrg = [0,0,0,0];
+  let matched = 0, contrast = 0;
+  ev.forEach(e => {
+    byDay[dayKey(e.t)] = (byDay[dayKey(e.t)] || 0) + 1;
+    const k = e.m ? (e.l || e.r) : 'No confident match';
+    byRule[k] = (byRule[k] || 0) + 1;
+    if(typeof e.u === 'number' && e.u >= 0 && e.u <= 3) byUrg[e.u]++;
+    if(e.m) matched++;
+    if(e.cn && e.cn !== 'none') contrast++;
+  });
+  const days = [];
+  for(let i = 13; i >= 0; i--){
+    const k = dayKey(now - i*DAY);
+    days.push({k:k, n:byDay[k] || 0});
+  }
+  const top = Object.keys(byRule).map(k => ({k:k, n:byRule[k]})).sort((a,b) => b.n - a.n);
+  return {
+    total: ev.length,
+    today: byDay[today] || 0,
+    last7: ev.filter(e => e.t > now - 7*DAY).length,
+    first: ev.length ? ev[0].t : null,
+    matchRate: ev.length ? Math.round(matched / ev.length * 100) : 0,
+    contrastRate: ev.length ? Math.round(contrast / ev.length * 100) : 0,
+    days: days, top: top, byUrg: byUrg
+  };
+}
+
+function renderUsage(){
+  const s = usageStats();
+  const p = document.getElementById('usagePanel');
+  const peak = Math.max(1, ...s.days.map(d => d.n));
+  const fmt = ts => ts ? new Date(ts).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}) : '—';
+
+  const stat = (n,k) => '<div class="stat"><div class="n">' + n + '</div><div class="k">' + k + '</div></div>';
+
+  const spark = '<div class="spark">' + s.days.map(d =>
+      '<div style="height:' + Math.max(4, Math.round(d.n / peak * 100)) + '%" title="'
+      + d.k + ': ' + d.n + '"></div>').join('') + '</div>'
+    + '<div class="sparkx"><span>' + s.days[0].k.slice(5) + '</span><span>today</span></div>';
+
+  const topMax = s.top.length ? s.top[0].n : 1;
+  const bars = s.top.slice(0,8).map(t =>
+      '<div class="bar"><div class="top"><span class="lbl">' + esc(t.k) + '</span>'
+    + '<span class="v">' + t.n + '</span></div>'
+    + '<div class="track"><i style="width:' + Math.round(t.n / topMax * 100) + '%"></i></div></div>').join('');
+
+  const urgLbl = ['Routine','2-week','Urgent 24h','Emergency'];
+  const urgTotal = s.byUrg.reduce((a,b) => a+b, 0) || 1;
+  const urgBars = s.byUrg.map((n,i) =>
+      '<div class="bar"><div class="top"><span class="lbl">' + urgLbl[i] + '</span>'
+    + '<span class="v">' + n + '</span></div>'
+    + '<div class="track"><i style="width:' + Math.round(n/urgTotal*100) + '%"></i></div></div>').reverse().join('');
+
+  p.innerHTML = '<div class="card">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;'
+    + 'border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:16px">'
+    + '<div><div class="ind" style="font-size:11px;color:var(--accent-ink);text-transform:uppercase;'
+    + 'letter-spacing:.085em;font-weight:750">Usage</div>'
+    + '<h2 style="margin:6px 0 0;font-size:21px;font-weight:680;letter-spacing:-.45px">Local usage log</h2>'
+    + '<p style="margin:6px 0 0;font-size:12.5px;color:var(--muted);max-width:70ch">'
+    + 'Counted each time <b>Recommend imaging</b> is pressed. No patient data is stored — only the timestamp, '
+    + 'the matched scenario, the urgency and the contrast type. This is local to this browser on this device '
+    + 'and is never transmitted.' + (LOG_OK ? '' : ' <b style="color:var(--warn)">Storage is blocked in this '
+    + 'context, so counting is session-only and resets on reload.</b>') + '</p></div>'
+    + '<div class="btnrow"><button type="button" id="usageCsv" class="ghost">Export CSV</button>'
+    + '<button type="button" id="usageReset" class="ghost">Reset</button>'
+    + '<button type="button" id="usageClose" class="ghost">Close</button></div></div>'
+
+    + '<div class="stat-grid">' + stat(s.total,'Total uses') + stat(s.today,'Today')
+    + stat(s.last7,'Last 7 days') + stat(s.matchRate + '%','Matched a scenario')
+    + stat(s.contrastRate + '%','Needed contrast') + '</div>'
+
+    + '<section class="blk"><h3>Last 14 days</h3>' + spark + '</section>'
+    + (s.top.length ? '<section class="blk"><h3>Most requested scenarios</h3><div class="bars">' + bars + '</div></section>' : '')
+    + (s.total ? '<section class="blk"><h3>Urgency requested</h3><div class="bars">' + urgBars + '</div></section>' : '')
+    + '<section class="blk"><h3>Record</h3><p style="margin:0;font-size:12.5px;color:var(--muted)">'
+    + 'First use ' + fmt(s.first) + '. ' + s.total + ' entries held'
+    + (s.total >= 5000 ? ' (capped at the most recent 5000)' : '') + '.</p></section>'
+    + '</div>';
+
+  document.getElementById('usageClose').addEventListener('click', () => { p.style.display = 'none'; });
+  document.getElementById('usageCsv').addEventListener('click', exportUsageCsv);
+  document.getElementById('usageReset').addEventListener('click', () => {
+    if(!confirm('Delete the whole usage log for this browser? This cannot be undone.')) return;
+    saveLog({events:[]});
+    paintCounter();
+    renderUsage();
+  });
+}
+
+function exportUsageCsv(){
+  const ev = loadLog().events;
+  if(!ev.length){ alert('No usage recorded yet.'); return; }
+  const urgLbl = ['Routine','2-week','Urgent 24h','Emergency'];
+  const rows = [['timestamp','date','scenario','category','urgency','contrast','matched']]
+    .concat(ev.map(e => [
+      new Date(e.t).toISOString(), dayKey(e.t),
+      '"' + String(e.l || e.r || 'No confident match').replace(/"/g,'""') + '"',
+      e.c || '', urgLbl[e.u] || '', e.cn || '', e.m ? 'yes' : 'no'
+    ]));
+  const blob = new Blob([rows.map(r => r.join(',')).join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'radiology-advisor-usage-' + dayKey(Date.now()) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+(function wireCounter(){
+  const c = document.getElementById('counter');
+  const toggle = () => {
+    const p = document.getElementById('usagePanel');
+    if(p.style.display === 'none' || !p.style.display){
+      renderUsage();
+      p.style.display = 'block';
+      p.scrollIntoView({behavior:'smooth', block:'nearest'});
+    } else p.style.display = 'none';
+  };
+  c.addEventListener('click', toggle);
+  c.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); } });
+})();
+paintCounter();
+
+/* ============================================================
+   8. FORM WIRING
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+
+function updateEgfrUI(){
+  const mode = $('egfrMode').value;
+  $('valWrap').style.display = mode === 'none' ? 'none' : '';
+  $('crUnitsWrap').style.display = mode === 'cr' ? 'grid' : 'none';
+  $('renalLbl').textContent = mode === 'cr' ? 'Creatinine value' : 'eGFR value';
+  $('renalVal').placeholder = mode === 'cr' ? 'e.g. 145' : 'e.g. 42';
+  showEgfr();
+}
+
+function computeEgfr(){
+  const mode = $('egfrMode').value;
+  if(mode === 'none') return {egfr:null, crText:''};
+  const v = parseFloat($('renalVal').value);
+  if(isNaN(v)) return {egfr:null, crText:''};
+  if(mode === 'egfr') return {egfr:Math.round(v), crText:''};
+  const age = parseFloat($('age').value), sex = $('sex').value;
+  const units = $('crUnits').value;
+  const umol = units === 'mgdl' ? v * 88.4 : v;
+  const crText = units === 'mgdl' ? v + ' mg/dL' : v + ' umol/L';
+  if(!age || !sex) return {egfr:null, crText:crText, needs:true};
+  return {egfr: ckdEpi2021(umol, age, sex), crText:crText};
+}
+
+function showEgfr(){
+  const b = $('egfrBadge');
+  const {egfr, needs} = computeEgfr();
+  if(needs){
+    b.className = 'egfr-badge show';
+    b.innerHTML = '<span style="color:var(--warn)">Enter age and sex to calculate eGFR from creatinine (CKD-EPI 2021).</span>';
+    return;
+  }
+  if(egfr === null){ b.className = 'egfr-badge'; b.innerHTML=''; return; }
+  const st = ckdStage(egfr);
+  const col = st.tone === 'ok' ? 'var(--ok)' : st.tone === 'warn' ? 'var(--warn)' : 'var(--danger)';
+  const stale = $('egfrMode').value === 'cr' && $('sampleAge').value === 'old'
+    ? '<div class="egfr-note" style="color:var(--warn)">Sample is over 90 days old — repeat before an elective contrast study.</div>' : '';
+  b.className = 'egfr-badge show';
+  b.innerHTML =
+      '<div class="egfr-top"><b style="color:' + col + '">' + egfr + '</b>'
+    + '<span style="color:var(--muted);font-size:12px">mL/min/1.73m&sup2;</span>'
+    + '<span style="margin-left:auto;color:' + col + ';font-weight:650;font-size:12.5px">' + st.stage + '</span></div>'
+    + '<div class="meter"><i style="width:' + Math.max(3, Math.min(100, egfr)) + '%;background:' + col + '"></i></div>'
+    + ($('egfrMode').value === 'cr'
+        ? '<div class="egfr-note">CKD-EPI 2021 (race-free). Not valid in AKI, extremes of body habitus, pregnancy or amputees.</div>'
+        : '')
+    + stale;
+}
+
+['egfrMode','renalVal','crUnits','age','sex','sampleAge'].forEach(id =>
+  $(id).addEventListener('input', showEgfr));
+$('egfrMode').addEventListener('change', updateEgfrUI);
+$('crUnits').addEventListener('change', showEgfr);
+$('sampleAge').addEventListener('change', showEgfr);
+
+$('form').addEventListener('submit', e => {
+  e.preventDefault();
+  const raw = $('indication').value;
+  const pre = preprocess(raw);
+  const {egfr, crText} = computeEgfr();
+  const state = {
+    indication: pre.text,
+    fuzz: pre.fuzz,
+    notes: pre.notes,
+    indicationRaw: raw.trim(),
+    age: parseFloat($('age').value) || null,
+    sex: $('sex').value,
+    weight: parseFloat($('weight').value) || null,
+    urgency: parseInt($('urgency').value, 10),
+    egfr: egfr,
+    crText: crText,
+    aki:$('aki').checked, dialysis:$('dialysis').checked, anuric:$('anuric').checked,
+    metformin:$('metformin').checked, transplant:$('transplant').checked, myeloma:$('myeloma').checked,
+    pregnant:$('pregnant').checked, breastfeeding:$('breastfeeding').checked,
+    contrastAllergy:$('contrastAllergy').checked, mriUnsafe:$('mriUnsafe').checked,
+    claustro:$('claustro').checked, thyrotox:$('thyrotox').checked,
+    anticoag:$('anticoag').checked, unwell:$('unwell').checked
+  };
+  const res = render(state);
+
+  /* Usage log — metadata only, never the indication text or patient values. */
+  logUse({
+    t:  Date.now(),
+    m:  !!res,
+    r:  res ? res.rule.id : null,
+    l:  res ? res.rule.label : null,
+    c:  res ? res.rule.cat : null,
+    u:  state.urgency,
+    cn: res ? res.contrast : null
+  });
+
+  document.getElementById('out').scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+updateEgfrUI();
+
+/* ============================================================
+   9. SELF-TEST
+   Regression suite for the matching pipeline. Run it after editing the
+   rule base: window.runSelfTest() in the console, or the button in the
+   footer. `null` means "no rule should match" — a correct, safe outcome.
+   ============================================================ */
+
+const TESTS = [
+  // --- core scenario matching ---
+  ['45M back pain with saddle anaesthesia and urinary retention','cauda','red flag'],
+  ['pleuritic chest pain and breathlessness, ?PE','pe','core'],
+  ['tearing chest pain radiating to back, unequal BP','dissection','core'],
+  ['left loin to groin pain, ?obstructing calculus','colic','core'],
+  ['24F right iliac fossa pain 18 hours, ?appendicitis','appendicitis','core'],
+  ['55F new breast lump upper outer quadrant','breast','core'],
+  ['62M known prostate cancer, now severe back pain and leg weakness','spinalmets','red flag'],
+  ['58F known breast cancer with new thoracic back pain','spinalmets','red flag'],
+
+  // --- negation: genuine negatives must be suppressed ---
+  ['45M back pain, no features of cauda equina, no saddle anaesthesia','backpain','negation'],
+  ['cough, no haemoptysis, no weight loss',null,'negation'],
+  ['32F optic neuritis, negative for demyelination previously','ms','negation'],
+  ['renal colic, no haematuria','colic','negation'],
+  ['68M haemoptysis, denies weight loss','haemoptysis','negation'],
+  ['headache for 3 months, history of migraine, normal neuro exam',null,'negation'],
+  ['70M collapse ?cause, no chest pain, no focal neurology',null,'negation'],
+
+  // --- pseudo-negation: requests to investigate must survive ---
+  ['please rule out PE, pleuritic chest pain','pe','pseudo-negation'],
+  ['?PE. sudden breathlessness','pe','pseudo-negation'],
+  ['to exclude aortic dissection, tearing chest pain','dissection','pseudo-negation'],
+  ['cannot exclude pulmonary embolism','pe','pseudo-negation'],
+  ['chest pain, PE ruled out on previous CTPA, now ?aortic dissection tearing pain to back','dissection','pseudo-negation'],
+
+  // --- historical context must not hijack the match ---
+  ['70F headache, no papilloedema but new focal deficit and known breast cancer','headache_rf','history'],
+  ['known COPD, presents with haemoptysis and weight loss','haemoptysis','history'],
+  ['previous stroke, now new onset severe headache and vomiting','headache_rf','history'],
+
+  // --- keyword that legitimately contains a negation word ---
+  ['abdominal pain and distension, vomiting, not opened bowels for 4 days','acuteabdo','edge case'],
+
+  // --- typos and spelling ---
+  ['24F right iliac fossa pain, ?apendicitis','appendicitis','typo'],
+  ['24F RIF pain, ?appendicits','appendicitis','typo'],
+  ['68M haemopysis and weight loss','haemoptysis','typo'],
+  ['65M frank haematuira','haematuria','typo'],
+  ['back pain, ?caudia equina, urinary retention','cauda','typo'],
+  ['back pain, saddle anaesthesia, ?cauda equine','cauda','typo'],
+  ['pleuritic chest pain ?pulmonry embolism','pe','typo'],
+  ['foot ulcer ?osteomyelits','osteomyelitis','typo'],
+  ['tearing chest pain ?aortic dissecton','dissection','typo'],
+  ['LIF pain ?diverticulits','diverticulitis','typo'],
+  ['?anuerysm, pulsatile abdominal mass','aaa','typo'],
+
+  // --- US spellings ---
+  ['68M hemoptysis and weight loss','haemoptysis','spelling'],
+  ['65M frank hematuria','haematuria','spelling'],
+  ['sudden severe headache, ?subarachnoid hemorrhage','sah','spelling'],
+
+  // --- abbreviations ---
+  ['72M SOB and pleuritic chest pain, ?PE','pe','abbreviation'],
+  ['head injury with LOC, on warfarin','headinjury','abbreviation'],
+  ['elderly fall, ? # NOF, unable to weight bear','fracture','abbreviation'],
+
+  // --- ordinary words must never be "corrected" into a diagnosis ---
+  ['patient reports feeling generally unwell for several weeks',null,'false-positive guard'],
+  ['routine review, no new symptoms, please advise',null,'false-positive guard'],
+  // "stabbing"/"staining" are one or two edits from "staging" — must not be
+  // rewritten into an oncology staging request
+  ['55M stabbing chest pain on exertion','chestpain_cardiac','false-positive guard'],
+  ['stabbing left iliac fossa pain, ?diverticulitis','diverticulitis','false-positive guard'],
+  ['tearing interscapular pain','dissection','false-positive guard']
+];
+
+function runSelfTest(){
+  const results = TESTS.map(t => {
+    const pre = preprocess(t[0]);
+    const neg = buildNegationMask(pre.text);
+    const s = scoreRules(pre.text, null, neg.mask, neg.hist, pre.fuzz);
+    const got = s.length ? s[0].rule.id : null;
+    return {input:t[0], expected:t[1], got:got, group:t[2],
+            pass:got === t[1], score:s.length ? s[0].score : 0,
+            fixes:pre.notes.map(n => n.from + '→' + n.to).join(', ')};
+  });
+  const pass = results.filter(r => r.pass).length;
+  return {passed:pass, total:results.length, results:results,
+          failures:results.filter(r => !r.pass)};
+}
+window.runSelfTest = runSelfTest;
+
+document.getElementById('selfTestBtn').addEventListener('click', function(){
+  const rep = runSelfTest();
+  const rows = rep.results.map(r =>
+    '<tr><td style="white-space:nowrap;color:' + (r.pass ? 'var(--ok)' : 'var(--danger)') + '">'
+    + (r.pass ? 'PASS' : 'FAIL') + '</td><td>' + esc(r.group) + '</td><td>' + esc(r.input)
+    + (r.fixes ? '<br><span style="opacity:.65">read as: ' + esc(r.fixes) + '</span>' : '')
+    + '</td><td>' + esc(String(r.got)) + (r.pass ? '' : ' <b>(expected ' + esc(String(r.expected)) + ')</b>')
+    + '</td></tr>').join('');
+  document.getElementById('selfTestOut').innerHTML =
+    '<div class="card" style="margin-top:14px"><section class="blk" style="margin-top:0">'
+    + '<h3>Self-test &mdash; ' + rep.passed + '/' + rep.total + ' passed</h3>'
+    + '<div style="overflow-x:auto"><table class="alt"><thead><tr><th>Result</th><th>Group</th>'
+    + '<th>Input</th><th>Matched rule</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '</section></div>';
+  document.getElementById('selfTestOut').scrollIntoView({behavior:'smooth', block:'start'});
+});
+</script>
+</body>
+</html>

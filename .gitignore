@@ -1,0 +1,11 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/
+
+# Never commit exported usage logs — keep them off the repo
+radiology-advisor-usage-*.csv
