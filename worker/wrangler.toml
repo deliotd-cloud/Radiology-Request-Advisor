@@ -1,0 +1,18 @@
+name = "rra-usage"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+# `wrangler d1 create rra-usage` prints the database_id — paste it below.
+[[d1_databases]]
+binding       = "DB"
+database_name = "rra-usage"
+database_id   = "PASTE_YOUR_DATABASE_ID_HERE"
+
+[vars]
+# Salt for the rate-limit IP hashing. Change it to any random string.
+# This is not a secret in the cryptographic sense; the ADMIN_TOKEN is,
+# and is set separately with `wrangler secret put ADMIN_TOKEN`.
+RATE_SALT = "change-me-to-anything"
+
+[observability]
+enabled = true

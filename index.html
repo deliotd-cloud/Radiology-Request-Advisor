@@ -410,8 +410,10 @@
   <p><b>Usage log.</b> Pressing <b>Recommend imaging</b> increments a counter held in this browser's local storage,
   shown in the header. Each entry records only the timestamp, the matched scenario, the requested urgency and the
   contrast type &mdash; never the indication text, the age or the renal values, so the log contains no patient data.
-  Nothing is transmitted; it is local to this browser profile on this device and will not aggregate across
-  users or machines. Click the counter to view statistics, export a CSV, or delete the log.</p>
+  Click the counter to view statistics, export a CSV, or delete the log. By default nothing is transmitted and the
+  count is local to this browser profile on this device. If <code>SYNC_URL</code> has been configured, the same
+  metadata is additionally sent to a self-hosted endpoint so totals pool across devices; patient data is never
+  sent either way, and if the endpoint is unreachable the tool carries on unaffected.</p>
   <p><b>Maintenance.</b> <button type="button" id="selfTestBtn" class="ghost" style="padding:5px 11px;font-size:12px">Run self-test</button>
   &nbsp;Runs the built-in regression suite against the rule base &mdash; useful after editing rules. Also available as
   <code>runSelfTest()</code> in the browser console.</p>
@@ -1849,6 +1851,41 @@ function render(state, forcedId){
 const LOG_KEY = 'rra.usage.v1';
 let memLog = null;               // fallback when localStorage is unavailable
 
+/* ---- Optional shared log -------------------------------------------------
+   Leave as '' and the tool stays fully offline: nothing is ever transmitted.
+
+   Set it to your Cloudflare Worker origin (see worker/ in the repository) to
+   pool counts across devices and users. Even then, only the same metadata
+   recorded locally is sent — timestamp, scenario, urgency, contrast type.
+   Never the indication text, the age or the renal values.
+
+   Sending is fire-and-forget: if the endpoint is unreachable, blocked by a
+   hospital proxy, or simply not configured, the tool carries on unaffected
+   and the local count still works.                                          */
+let SYNC_URL = '';   // e.g. 'https://rra-usage.your-subdomain.workers.dev'
+
+const syncBase = () => SYNC_URL.replace(/\/+$/, '');
+
+function syncEvent(e){
+  if(!SYNC_URL) return;
+  try{
+    fetch(syncBase() + '/log', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({m:e.m, r:e.r, l:e.l, c:e.c, u:e.u, cn:e.cn}),
+      mode:'cors',
+      keepalive:true
+    }).catch(function(){ /* offline or blocked — ignore */ });
+  }catch(err){ /* never let telemetry break the tool */ }
+}
+
+function fetchShared(){
+  if(!SYNC_URL) return Promise.resolve(null);
+  return fetch(syncBase() + '/stats', {mode:'cors'})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .catch(function(){ return null; });
+}
+
 function logAvailable(){
   try{
     localStorage.setItem('rra.probe','1');
@@ -1878,6 +1915,7 @@ function logUse(entry){
   if(l.events.length > 5000) l.events = l.events.slice(-5000);   // cap growth
   saveLog(l);
   paintCounter();
+  syncEvent(entry);
 }
 
 function paintCounter(){
@@ -1951,25 +1989,64 @@ function renderUsage(){
     + 'letter-spacing:.085em;font-weight:750">Usage</div>'
     + '<h2 style="margin:6px 0 0;font-size:21px;font-weight:680;letter-spacing:-.45px">Local usage log</h2>'
     + '<p style="margin:6px 0 0;font-size:12.5px;color:var(--muted);max-width:70ch">'
-    + 'Counted each time <b>Recommend imaging</b> is pressed. No patient data is stored — only the timestamp, '
-    + 'the matched scenario, the urgency and the contrast type. This is local to this browser on this device '
-    + 'and is never transmitted.' + (LOG_OK ? '' : ' <b style="color:var(--warn)">Storage is blocked in this '
-    + 'context, so counting is session-only and resets on reload.</b>') + '</p></div>'
+    + 'Counted each time <b>Recommend imaging</b> is pressed. No patient data is recorded — only the '
+    + 'timestamp, the matched scenario, the urgency and the contrast type. Never the indication text, '
+    + 'the age or the renal values. '
+    + (SYNC_URL
+        ? 'Counts are held locally <b>and</b> sent to the shared usage endpoint so totals pool across devices.'
+        : 'Nothing is transmitted — this is local to this browser on this device.')
+    + (LOG_OK ? '' : ' <b style="color:var(--warn)">Local storage is blocked in this '
+    + 'context, so on-device counting is session-only and resets on reload.</b>') + '</p></div>'
     + '<div class="btnrow"><button type="button" id="usageCsv" class="ghost">Export CSV</button>'
     + '<button type="button" id="usageReset" class="ghost">Reset</button>'
     + '<button type="button" id="usageClose" class="ghost">Close</button></div></div>'
 
+    + '<div id="sharedBox">' + (SYNC_URL
+        ? '<section class="blk" style="margin-top:0"><h3>Shared &mdash; all devices</h3>'
+          + '<p style="margin:0;font-size:12.5px;color:var(--muted)">Loading&hellip;</p></section>'
+        : '<div class="alert a-info" style="margin-bottom:18px"><span class="ic">i</span><div>'
+          + '<b>Counting is per-device</b>This browser only. To pool counts across everyone using the '
+          + 'tool, deploy the Cloudflare Worker in <code>worker/</code> and set <code>SYNC_URL</code> '
+          + 'near the top of the usage-log section in this file.</div></div>') + '</div>'
+
+    + '<section class="blk"' + (SYNC_URL ? '' : ' style="margin-top:0"') + '><h3>This device</h3>'
     + '<div class="stat-grid">' + stat(s.total,'Total uses') + stat(s.today,'Today')
     + stat(s.last7,'Last 7 days') + stat(s.matchRate + '%','Matched a scenario')
-    + stat(s.contrastRate + '%','Needed contrast') + '</div>'
+    + stat(s.contrastRate + '%','Needed contrast') + '</div></section>'
 
-    + '<section class="blk"><h3>Last 14 days</h3>' + spark + '</section>'
+    + '<section class="blk"><h3>Last 14 days (this device)</h3>' + spark + '</section>'
     + (s.top.length ? '<section class="blk"><h3>Most requested scenarios</h3><div class="bars">' + bars + '</div></section>' : '')
     + (s.total ? '<section class="blk"><h3>Urgency requested</h3><div class="bars">' + urgBars + '</div></section>' : '')
     + '<section class="blk"><h3>Record</h3><p style="margin:0;font-size:12.5px;color:var(--muted)">'
     + 'First use ' + fmt(s.first) + '. ' + s.total + ' entries held'
     + (s.total >= 5000 ? ' (capped at the most recent 5000)' : '') + '.</p></section>'
     + '</div>';
+
+  /* Shared totals load asynchronously so a slow or blocked endpoint never
+     delays the panel. */
+  if(SYNC_URL) fetchShared().then(g => {
+    const box = document.getElementById('sharedBox');
+    if(!box) return;
+    if(!g || !g.ok){
+      box.innerHTML = '<div class="alert a-warn" style="margin-bottom:18px"><span class="ic">!</span><div>'
+        + '<b>Shared totals unavailable</b>The usage endpoint could not be reached — it may be offline, '
+        + 'or blocked by the network. Local counting is unaffected.</div></div>';
+      return;
+    }
+    const gtop = g.top && g.top.length
+      ? '<section class="blk"><h3>Most requested scenarios (everyone)</h3><div class="bars">'
+        + g.top.slice(0,8).map(t => '<div class="bar"><div class="top"><span class="lbl">' + esc(t.k)
+          + '</span><span class="v">' + t.n + '</span></div><div class="track"><i style="width:'
+          + Math.round(t.n / g.top[0].n * 100) + '%"></i></div></div>').join('') + '</div></section>'
+      : '';
+    box.innerHTML = '<section class="blk" style="margin-top:0"><h3>Shared &mdash; all devices</h3>'
+      + '<div class="stat-grid">' + stat(g.total,'Total uses') + stat(g.today,'Today')
+      + stat(g.last7,'Last 7 days') + stat(g.matchRate + '%','Matched a scenario')
+      + stat(g.contrastRate + '%','Needed contrast') + '</div>'
+      + '<p style="margin:11px 0 0;font-size:11.8px;color:var(--muted)">Pooled across everyone using the '
+      + 'tool, including anonymous visitors to the public page. First recorded ' + fmt(g.first) + '.</p>'
+      + '</section>' + gtop;
+  });
 
   document.getElementById('usageClose').addEventListener('click', () => { p.style.display = 'none'; });
   document.getElementById('usageCsv').addEventListener('click', exportUsageCsv);

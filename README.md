@@ -31,8 +31,11 @@ git clone https://github.com/deliotd-cloud/Radiology-Request-Advisor.git
 
 Then double-click `index.html`.
 
-**Patient data never leaves the device.** There is no server, no analytics and no network request of any
-kind — the file makes no external calls. Everything runs in the browser.
+**Patient data never leaves the device.** Out of the box there is no server, no analytics and no network
+request of any kind — the file makes no external calls at all. Everything runs in the browser.
+
+An *optional* shared usage counter can be enabled (see [Shared usage log](#shared-usage-log-optional)).
+Even then, no patient data is transmitted: only a scenario id, urgency and contrast type.
 
 ## What it does
 
@@ -107,6 +110,75 @@ header. Click it for statistics, CSV export, or to delete the log.
 urgency and the contrast type. Never the indication text, the age or the renal values. Nothing is
 transmitted. The log is local to one browser profile on one device and does **not** aggregate across
 users or machines.
+
+## Shared usage log (optional)
+
+By default counting is per-device. To pool totals across everyone using the tool, deploy the Cloudflare
+Worker in [`worker/`](worker/). It is free-tier sized: a Worker plus a D1 (SQLite) database.
+
+### Deploy
+
+```bash
+cd worker
+npx wrangler login
+npx wrangler d1 create rra-usage
+```
+
+Paste the printed `database_id` into `wrangler.toml`, then:
+
+```bash
+npx wrangler d1 execute rra-usage --remote --file=./schema.sql
+npx wrangler secret put ADMIN_TOKEN
+npx wrangler deploy
+```
+
+Finally, set `SYNC_URL` near the top of the usage-log section in `index.html` to the deployed Worker
+URL, and push. Leaving it as `''` keeps the tool completely offline.
+
+### Endpoints
+
+| Route | Access | Purpose |
+|---|---|---|
+| `POST /log` | public, write-only, rate limited | Record one use |
+| `GET /stats` | public, read-only | Aggregate counts only — never raw rows |
+| `GET /export` | requires `ADMIN_TOKEN` | Full CSV export |
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  https://rra-usage.<your-subdomain>.workers.dev/export -o usage.csv
+```
+
+### Why this is safe to expose publicly
+
+The page is public, so anything in it is public. The endpoint is designed on that assumption:
+
+- **No free-text field exists.** The client sends a scenario *id*; the Worker looks the label and
+  category up in a generated allowlist (`src/scenarios.js`) and discards any text the client sent.
+  A modified client cannot store arbitrary strings — let alone patient data — in the database.
+  Unknown ids are rejected with 400.
+- **Write-only for anonymous callers.** No public key grants read access to raw rows; `/export` needs
+  a secret only you hold.
+- **The server assigns the timestamp**, so a client cannot backdate or flood the series.
+- **Rate limited** per caller, with IPs salted-hashed using a daily-rotating salt, stored only in
+  short-lived rate-limit buckets and never alongside events. No raw IP is written to disk.
+
+### Caveats worth knowing
+
+- The page is public, so totals count **anyone who finds it**, not just your department. It is a
+  usage counter, not an audit trail.
+- Telemetry is fire-and-forget. If a hospital proxy blocks the endpoint, the tool works normally and
+  falls back to local counting.
+- Adding this means the tool makes outbound network calls, which some information-governance teams
+  will want to know about even though no patient data is involved.
+
+### After editing the rule base
+
+Regenerate the allowlist, or the Worker will reject events for new scenarios:
+
+```bash
+node worker/gen-scenarios.js
+npx wrangler deploy
+```
 
 ## Editing the rule base
 

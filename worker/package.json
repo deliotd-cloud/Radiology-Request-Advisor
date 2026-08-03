@@ -1,0 +1,13 @@
+{
+  "name": "rra-usage",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared usage log for the Radiology Request Advisor (Cloudflare Worker + D1)",
+  "scripts": {
+    "gen": "node gen-scenarios.js",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "init-db": "wrangler d1 execute rra-usage --remote --file=./schema.sql"
+  }
+}
