@@ -220,6 +220,19 @@
   .foot{max-width:1280px;margin:0 auto;padding:0 24px 48px;font-size:11.8px;color:var(--muted);line-height:1.65}
   .foot p{margin:0 0 9px;max-width:100ch}
   .foot b{color:var(--ink-2)}
+  .footbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+           border-top:1px solid var(--line);padding-top:14px}
+  .fnote{font-size:11.5px;color:var(--muted)}
+  .ftabs{display:flex;gap:6px;flex-wrap:wrap}
+  .ftab{font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:99px;color:var(--muted);
+        background:transparent;border:1px solid transparent}
+  .ftab:hover{color:var(--accent-ink);background:var(--surface);border-color:var(--line)}
+  .ftab[aria-expanded="true"]{color:var(--accent-ink);background:var(--accent-soft);
+        border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+  .fpanel{display:none;margin-top:14px;padding:15px 17px;background:var(--surface);
+          border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+  .fpanel.open{display:block;animation:rise .22s cubic-bezier(.2,.7,.3,1) both}
+  .fpanel p:last-child{margin-bottom:0}
   .disclaimer{background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 32%,transparent);
               border-left:3px solid var(--warn);border-radius:var(--r);padding:11px 14px;
               font-size:12.4px;margin-bottom:18px;color:var(--ink-2);line-height:1.55}
@@ -383,6 +396,17 @@
 <div id="selfTestOut" class="wrap" style="display:block;padding-top:0"></div>
 
 <div class="foot">
+  <div class="footbar">
+    <span class="fnote">Decision support only &middot; not clinically validated &middot; always follow local protocols</span>
+    <div class="ftabs">
+      <button type="button" class="ftab" data-panel="fp-method">How it works</button>
+      <button type="button" class="ftab" data-panel="fp-limits">Limitations</button>
+      <button type="button" class="ftab" data-panel="fp-privacy">Privacy</button>
+      <button type="button" class="ftab" data-panel="fp-maint">Maintenance</button>
+    </div>
+  </div>
+
+  <div class="fpanel" id="fp-method">
   <p><b>How this works.</b> The free-text indication is first screened for negation, then matched against a weighted
   keyword rule base of common referral scenarios. The highest-scoring scenario drives the modality recommendation;
   renal function, pregnancy, age and safety flags then modify it (contrast route, gadolinium agent class, metformin
@@ -395,18 +419,24 @@
   whichever is shorter. The cue list is intentionally conservative: failing to spot a negation merely over-suggests a
   scan, which vetting will catch, whereas a false negation could suppress one that was needed. Everything the tool
   treated as negative is listed back to you so you can check it.</p>
+  <p><b>Spelling and abbreviations.</b> Input is normalised before matching in three stages: abbreviation
+  expansion (SOB, LOC, #NOF, h/o), known UK/US spelling variants (hemoptysis &rarr; haemoptysis), and finally
+  Damerau&ndash;Levenshtein typo correction against the clinical vocabulary used by the rules. Typo correction is
+  skipped for words under 5 characters, allows one edit up to 9 characters and two beyond that, requires the first
+  letter to match for two-edit corrections, and makes no correction at all when two different terms tie &mdash; an
+  ambiguous guess is worse than none. Corrected terms score at 85% weight so a guess cannot outrank an exact match,
+  and every substitution is listed back to you.</p>
+  </div>
+
+  <div class="fpanel" id="fp-limits">
   <p><b>Limitations.</b> Keyword matching cannot understand nuance, temporality or unusual presentations, and
   negation detection is a heuristic rather than genuine comprehension. It has no access to the patient record. It does
   not replace vetting by a radiologist, and it does not cover every indication. Effective doses are population averages
   and vary with scanner, protocol and body habitus. Renal thresholds follow current RCR/ESUR/ACR consensus but local
   policy takes precedence.</p>
-  <p><b>Spelling and abbreviations.</b> Input is normalised before matching in three stages: abbreviation
-  expansion (SOB, LOC, #NOF, h/o), known UK/US spelling variants (hemoptysis &rarr; haemoptysis), and finally
-  Damerau&ndash;Levenshtein typo correction against the clinical vocabulary used by the rules. Typo correction is
-  skipped for words under 5 characters, allows one edit up to 7 characters and two beyond that, requires the first
-  letter to match for two-edit corrections, and makes no correction at all when two different terms tie &mdash; an
-  ambiguous guess is worse than none. Corrected terms score at 85% weight so a guess cannot outrank an exact match,
-  and every substitution is listed back to you.</p>
+  </div>
+
+  <div class="fpanel" id="fp-privacy">
   <p><b>Usage log.</b> Pressing <b>Recommend imaging</b> increments a counter held in this browser's local storage,
   shown in the header. Each entry records only the timestamp, the matched scenario, the requested urgency and the
   contrast type &mdash; never the indication text, the age or the renal values, so the log contains no patient data.
@@ -414,9 +444,13 @@
   count is local to this browser profile on this device. If <code>SYNC_URL</code> has been configured, the same
   metadata is additionally sent to a self-hosted endpoint so totals pool across devices; patient data is never
   sent either way, and if the endpoint is unreachable the tool carries on unaffected.</p>
+  </div>
+
+  <div class="fpanel" id="fp-maint">
   <p><b>Maintenance.</b> <button type="button" id="selfTestBtn" class="ghost" style="padding:5px 11px;font-size:12px">Run self-test</button>
   &nbsp;Runs the built-in regression suite against the rule base &mdash; useful after editing rules. Also available as
   <code>runSelfTest()</code> in the browser console.</p>
+  </div>
 </div>
 
 <script>
@@ -2282,6 +2316,27 @@ function runSelfTest(){
           failures:results.filter(r => !r.pass)};
 }
 window.runSelfTest = runSelfTest;
+
+/* Footer disclosure — one panel open at a time, all closed by default. */
+(function wireFooter(){
+  const tabs = [].slice.call(document.querySelectorAll('.ftab'));
+  tabs.forEach(t => {
+    t.setAttribute('aria-expanded','false');
+    t.setAttribute('aria-controls', t.dataset.panel);
+    t.addEventListener('click', () => {
+      const panel = document.getElementById(t.dataset.panel);
+      const wasOpen = panel.classList.contains('open');
+      tabs.forEach(o => {
+        o.setAttribute('aria-expanded','false');
+        document.getElementById(o.dataset.panel).classList.remove('open');
+      });
+      if(!wasOpen){
+        panel.classList.add('open');
+        t.setAttribute('aria-expanded','true');
+      }
+    });
+  });
+})();
 
 document.getElementById('selfTestBtn').addEventListener('click', function(){
   const rep = runSelfTest();
