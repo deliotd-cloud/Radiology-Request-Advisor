@@ -138,11 +138,43 @@ async function handleLog(env, request) {
   return json({ ok: true, total: total.n });
 }
 
+async function handleFeedback(env, request) {
+  if (await rateLimited(env, request))
+    return json({ ok: false, error: 'rate limited' }, 429);
+
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ ok: false, error: 'invalid JSON' }, 400); }
+
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    return json({ ok: false, error: 'invalid payload' }, 400);
+
+  // Rating must be an integer 1..5. Nothing else is accepted.
+  const rating = body.rating;
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5)
+    return json({ ok: false, error: 'rating must be an integer 1-5' }, 400);
+
+  // Optional context: which scenario was on screen. Allowlisted, never text.
+  let rule = null;
+  if (typeof body.r === 'string' && ID_RE.test(body.r) && SCENARIOS[body.r]) rule = body.r;
+
+  const ts = Date.now();
+  await env.DB.prepare(
+    'INSERT INTO feedback (ts, day, rating, rule) VALUES (?1, ?2, ?3, ?4)'
+  ).bind(ts, dayKey(ts), rating, rule).run();
+
+  const agg = await env.DB.prepare(
+    'SELECT COUNT(*) AS n, AVG(rating) AS avg FROM feedback'
+  ).first();
+
+  return json({ ok: true, count: agg.n, avg: agg.avg });
+}
+
 async function handleStats(env) {
   const now = Date.now();
   const q = sql => env.DB.prepare(sql);
 
-  const [total, today, last7, matched, contrast, days, top, urg, first] = await Promise.all([
+  const [total, today, last7, matched, contrast, days, top, urg, first, fb, fbDist] = await Promise.all([
     q('SELECT COUNT(*) AS n FROM events').first(),
     q('SELECT COUNT(*) AS n FROM events WHERE day = ?1').bind(dayKey(now)).first(),
     q('SELECT COUNT(*) AS n FROM events WHERE ts > ?1').bind(now - 7 * 86400000).first(),
@@ -153,7 +185,9 @@ async function handleStats(env) {
     q(`SELECT COALESCE(label, 'No confident match') AS k, COUNT(*) AS n
         FROM events GROUP BY k ORDER BY n DESC LIMIT 10`).all(),
     q('SELECT urgency AS u, COUNT(*) AS n FROM events GROUP BY urgency').all(),
-    q('SELECT MIN(ts) AS t FROM events').first()
+    q('SELECT MIN(ts) AS t FROM events').first(),
+    q('SELECT COUNT(*) AS n, AVG(rating) AS avg FROM feedback').first(),
+    q('SELECT rating, COUNT(*) AS n FROM feedback GROUP BY rating').all()
   ]);
 
   const byDay = {};
@@ -167,10 +201,18 @@ async function handleStats(env) {
   const byUrg = [0, 0, 0, 0];
   (urg.results || []).forEach(r => { if (r.u >= 0 && r.u <= 3) byUrg[r.u] = r.n; });
 
+  const dist = [0, 0, 0, 0, 0];
+  (fbDist.results || []).forEach(r => { if (r.rating >= 1 && r.rating <= 5) dist[r.rating - 1] = r.n; });
+
   const n = total.n || 0;
   return json({
     ok: true,
     total: n,
+    feedback: {
+      count: fb.n || 0,
+      avg:   fb.avg ? Math.round(fb.avg * 100) / 100 : null,
+      dist:  dist
+    },
     today: today.n,
     last7: last7.n,
     first: first.t || null,
@@ -182,11 +224,29 @@ async function handleStats(env) {
   });
 }
 
-async function handleExport(env, request) {
+async function handleExport(env, request, url) {
   const auth = request.headers.get('Authorization') || '';
   const tok  = auth.replace(/^Bearer\s+/i, '');
   if (!env.ADMIN_TOKEN || tok !== env.ADMIN_TOKEN)
     return new Response('Unauthorized\n', { status: 401 });
+
+  if (url.searchParams.get('type') === 'feedback') {
+    const fb = await env.DB.prepare(
+      'SELECT ts, day, rating, rule FROM feedback ORDER BY ts'
+    ).all();
+    const csv = ['timestamp,date,rating,scenario']
+      .concat((fb.results || []).map(r => [
+        new Date(r.ts).toISOString(), r.day, r.rating,
+        '"' + String(r.rule && SCENARIOS[r.rule] ? SCENARIOS[r.rule][0] : '').replace(/"/g, '""') + '"'
+      ].join(',')))
+      .join('\n');
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="rra-feedback.csv"'
+      }
+    });
+  }
 
   const rows = await env.DB.prepare(
     'SELECT ts, day, matched, rule, label, cat, urgency, contrast FROM events ORDER BY ts'
@@ -216,16 +276,19 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
     try {
-      if (url.pathname === '/log'    && request.method === 'POST') return await handleLog(env, request);
+      if (url.pathname === '/log'      && request.method === 'POST') return await handleLog(env, request);
+      if (url.pathname === '/feedback' && request.method === 'POST') return await handleFeedback(env, request);
       if (url.pathname === '/stats'  && request.method === 'GET')  return await handleStats(env);
-      if (url.pathname === '/export' && request.method === 'GET')  return await handleExport(env, request);
+      if (url.pathname === '/export' && request.method === 'GET')  return await handleExport(env, request, url);
 
       if (url.pathname === '/')
         return new Response(
           'Radiology Request Advisor — shared usage log\n\n' +
-          'POST /log     record one use (public, write-only, rate limited)\n' +
-          'GET  /stats   aggregate counts (public, read-only)\n' +
-          'GET  /export  CSV export (requires ADMIN_TOKEN)\n\n' +
+          'POST /log       record one use (public, write-only, rate limited)\n' +
+          'POST /feedback  record a 1-5 usefulness rating (public, write-only)\n' +
+          'GET  /stats     aggregate counts and rating summary (public, read-only)\n' +
+          'GET  /export    CSV export of uses (requires ADMIN_TOKEN)\n' +
+          'GET  /export?type=feedback   CSV export of ratings (requires ADMIN_TOKEN)\n\n' +
           'No patient data is stored here.\n',
           { headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS } }
         );

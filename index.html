@@ -121,6 +121,25 @@
         box-shadow:0 4px 16px -3px color-mix(in srgb,var(--accent) 65%,transparent)}
   .btnrow{display:flex;gap:9px;flex-wrap:wrap}
 
+  /* ---------- feedback ---------- */
+  .fb{margin-top:16px;padding:14px 15px;border:1px solid var(--line);border-radius:var(--r);
+      background:var(--surface-2);animation:rise .3s cubic-bezier(.2,.7,.3,1) both}
+  .fb[hidden]{display:none}
+  .fb-q{font-size:13px;font-weight:640;color:var(--ink);text-align:center;margin-bottom:11px}
+  .fb-scale{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+  .fb-btn{padding:11px 0;font-size:15px;font-weight:660;font-variant-numeric:tabular-nums;
+          background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:var(--r-sm)}
+  .fb-btn:hover{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink);
+                transform:translateY(-1px)}
+  .fb-btn:active{transform:translateY(0)}
+  .fb-btn[aria-checked="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+  .fb-ends{display:flex;justify-content:space-between;margin-top:7px;font-size:10.5px;color:var(--muted)}
+  .fb-thanks{display:flex;align-items:center;justify-content:center;gap:9px;padding:4px 0;
+             font-size:13.5px;font-weight:620;color:var(--ok);text-align:center}
+  .fb-thanks .tick{width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;
+                   display:grid;place-items:center;font-size:12px;font-weight:800;flex:0 0 auto}
+  .fb-sub{display:block;font-size:11.5px;color:var(--muted);font-weight:400;margin-top:3px}
+
   /* ---------- eGFR readout ---------- */
   .egfr-badge{margin-top:12px;border-radius:var(--r);padding:12px 14px;font-size:13px;
               border:1px solid var(--line);background:var(--surface-2);display:none}
@@ -379,6 +398,18 @@
     </fieldset>
 
     <button type="submit" class="primary">Recommend imaging</button>
+
+    <div class="fb" id="feedback" hidden>
+      <div class="fb-q" id="fbQ">How useful did you find this tool?</div>
+      <div class="fb-scale" id="fbScale" role="radiogroup" aria-labelledby="fbQ">
+        <button type="button" class="fb-btn" data-rating="1" role="radio" aria-checked="false" aria-label="1, not useful at all">1</button>
+        <button type="button" class="fb-btn" data-rating="2" role="radio" aria-checked="false" aria-label="2">2</button>
+        <button type="button" class="fb-btn" data-rating="3" role="radio" aria-checked="false" aria-label="3">3</button>
+        <button type="button" class="fb-btn" data-rating="4" role="radio" aria-checked="false" aria-label="4">4</button>
+        <button type="button" class="fb-btn" data-rating="5" role="radio" aria-checked="false" aria-label="5, very useful">5</button>
+      </div>
+      <div class="fb-ends"><span>Not useful at all</span><span>Very useful</span></div>
+    </div>
   </form>
 
   <!-- ============ OUTPUT ============ -->
@@ -1913,6 +1944,69 @@ function syncEvent(e){
   }catch(err){ /* never let telemetry break the tool */ }
 }
 
+/* ---- Usefulness rating ---------------------------------------------------
+   Shown under the button once a recommendation has been produced. Asked at
+   most once per RATING_COOLDOWN so a regular user is not pestered on every
+   request and cannot skew the average by rating repeatedly.                 */
+const RATED_KEY = 'rra.rated.v1';
+const RATING_COOLDOWN = 30 * 86400000;   // 30 days
+
+let lastRuleId = null;
+
+function alreadyRated(){
+  try{
+    const t = parseInt(localStorage.getItem(RATED_KEY), 10);
+    return !!t && (Date.now() - t) < RATING_COOLDOWN;
+  }catch(e){ return false; }
+}
+
+function markRated(){
+  try{ localStorage.setItem(RATED_KEY, String(Date.now())); }catch(e){}
+}
+
+function showFeedback(){
+  const box = document.getElementById('feedback');
+  if(!box || alreadyRated() || box.dataset.done === '1') return;
+  box.hidden = false;
+}
+
+function thankUser(){
+  const box = document.getElementById('feedback');
+  box.dataset.done = '1';
+  box.innerHTML = '<div class="fb-thanks"><span class="tick">&#10003;</span>'
+    + '<span>Thank you for your feedback<span class="fb-sub">Your rating helps improve the rule base</span></span></div>';
+}
+
+function sendRating(rating){
+  markRated();
+  if(SYNC_URL){
+    try{
+      fetch(syncBase() + '/feedback', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({rating:rating, r:lastRuleId}),
+        mode:'cors',
+        keepalive:true
+      }).catch(function(){});
+    }catch(err){}
+  }
+}
+
+(function wireFeedback(){
+  const scale = document.getElementById('fbScale');
+  if(!scale) return;
+  scale.addEventListener('click', function(e){
+    const btn = e.target.closest('.fb-btn');
+    if(!btn) return;
+    const rating = parseInt(btn.dataset.rating, 10);
+    if(!(rating >= 1 && rating <= 5)) return;
+    btn.setAttribute('aria-checked','true');
+    sendRating(rating);
+    /* Brief pause so the press registers visually before the box changes. */
+    setTimeout(thankUser, 220);
+  });
+})();
+
 function fetchShared(){
   if(!SYNC_URL) return Promise.resolve(null);
   return fetch(syncBase() + '/stats', {mode:'cors'})
@@ -2073,13 +2167,30 @@ function renderUsage(){
           + '</span><span class="v">' + t.n + '</span></div><div class="track"><i style="width:'
           + Math.round(t.n / g.top[0].n * 100) + '%"></i></div></div>').join('') + '</div></section>'
       : '';
+    const fbk = g.feedback || {count:0, avg:null, dist:[0,0,0,0,0]};
+    const fbMax = Math.max(1, ...fbk.dist);
+    const fbBlock = fbk.count
+      ? '<section class="blk"><h3>Usefulness rating</h3>'
+        + '<div class="stat-grid" style="margin-bottom:12px">'
+        + stat(fbk.avg == null ? '—' : fbk.avg.toFixed(2), 'Average of 5')
+        + stat(fbk.count, 'Ratings given') + '</div>'
+        + '<div class="bars">' + fbk.dist.map((n,i) =>
+            '<div class="bar"><div class="top"><span class="lbl">' + (i+1)
+            + (i === 0 ? ' — not useful at all' : i === 4 ? ' — very useful' : '')
+            + '</span><span class="v">' + n + '</span></div>'
+            + '<div class="track"><i style="width:' + Math.round(n / fbMax * 100) + '%"></i></div></div>'
+          ).reverse().join('') + '</div></section>'
+      : '<section class="blk"><h3>Usefulness rating</h3>'
+        + '<p style="margin:0;font-size:12.5px;color:var(--muted)">No ratings yet. Users are asked once '
+        + 'after their first recommendation.</p></section>';
+
     box.innerHTML = '<section class="blk" style="margin-top:0"><h3>Shared &mdash; all devices</h3>'
       + '<div class="stat-grid">' + stat(g.total,'Total uses') + stat(g.today,'Today')
       + stat(g.last7,'Last 7 days') + stat(g.matchRate + '%','Matched a scenario')
       + stat(g.contrastRate + '%','Needed contrast') + '</div>'
       + '<p style="margin:11px 0 0;font-size:11.8px;color:var(--muted)">Pooled across everyone using the '
       + 'tool, including anonymous visitors to the public page. First recorded ' + fmt(g.first) + '.</p>'
-      + '</section>' + gtop;
+      + '</section>' + fbBlock + gtop;
   });
 
   document.getElementById('usageClose').addEventListener('click', () => { p.style.display = 'none'; });
@@ -2220,6 +2331,9 @@ $('form').addEventListener('submit', e => {
     u:  state.urgency,
     cn: res ? res.contrast : null
   });
+
+  lastRuleId = res ? res.rule.id : null;
+  showFeedback();
 
   document.getElementById('out').scrollIntoView({behavior:'smooth', block:'start'});
 });

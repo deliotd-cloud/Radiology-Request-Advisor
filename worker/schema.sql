@@ -21,6 +21,21 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_day ON events(day);
 CREATE INDEX IF NOT EXISTS idx_events_ts  ON events(ts);
 
+-- User-satisfaction ratings, 1 (not useful at all) to 5 (very useful).
+-- Also holds the scenario that was on screen when the rating was given, so
+-- ratings can be broken down by indication type. Still no patient data and
+-- still no free-text field — the rating is an integer and the scenario is an
+-- allowlisted id.
+CREATE TABLE IF NOT EXISTS feedback (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts      INTEGER NOT NULL,
+  day     TEXT    NOT NULL,
+  rating  INTEGER NOT NULL,          -- 1..5
+  rule    TEXT                       -- scenario shown at the time, may be NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
+
 -- Abuse control only. Buckets are short-lived and purged automatically.
 -- The bucket key is a salted hash of the caller IP truncated to 16 hex chars,
 -- with the salt rotating daily, so rows cannot be correlated across days and
