@@ -9,3 +9,9 @@ desktop.ini
 
 # Never commit exported usage logs — keep them off the repo
 radiology-advisor-usage-*.csv
+
+# Wrangler local state and caches (contains account id, not for the repo)
+.wrangler/
+worker/.wrangler/
+.dev.vars
+.dev.vars.*
