@@ -6,13 +6,18 @@ compatibility_date = "2025-01-01"
 [[d1_databases]]
 binding       = "DB"
 database_name = "rra-usage"
-database_id   = "PASTE_YOUR_DATABASE_ID_HERE"
+database_id   = "6b6a5d07-b81f-4618-bf39-cb9871ee6ac2"
 
-[vars]
-# Salt for the rate-limit IP hashing. Change it to any random string.
-# This is not a secret in the cryptographic sense; the ADMIN_TOKEN is,
-# and is set separately with `wrangler secret put ADMIN_TOKEN`.
-RATE_SALT = "change-me-to-anything"
+# Secrets — set these with `wrangler secret put`, never in this file.
+# This file is committed to a public repository.
+#
+#   openssl rand -hex 32 | npx wrangler secret put RATE_SALT
+#   npx wrangler secret put ADMIN_TOKEN
+#
+# RATE_SALT   salt for rate-limit IP hashing. Must NOT be public: a known
+#             salt would let someone brute-force an IP back out of a bucket
+#             hash, since the IPv4 space is small enough to enumerate.
+# ADMIN_TOKEN bearer token guarding GET /export.
 
 [observability]
 enabled = true

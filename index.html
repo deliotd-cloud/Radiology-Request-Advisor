@@ -1862,7 +1862,7 @@ let memLog = null;               // fallback when localStorage is unavailable
    Sending is fire-and-forget: if the endpoint is unreachable, blocked by a
    hospital proxy, or simply not configured, the tool carries on unaffected
    and the local count still works.                                          */
-let SYNC_URL = '';   // e.g. 'https://rra-usage.your-subdomain.workers.dev'
+let SYNC_URL = 'https://rra-usage.rra-usage.workers.dev';
 
 const syncBase = () => SYNC_URL.replace(/\/+$/, '');
 
